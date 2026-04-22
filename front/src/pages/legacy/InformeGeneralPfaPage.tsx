@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import Icon from '@/components/ui/Icon';
 import { useLegacyAuth } from '@/context/LegacyAuthContext';
 
@@ -448,8 +448,9 @@ export default function InformeGeneralPfaPage() {
         </section>
       )}
 
-      {/* Resultado del informe (se muestra cuando termina, sin importar si alguna fase tuvo error) */}
-      {contexto && !sinActividad && !generando && (
+      {/* Resultado del informe — se renderiza apenas hay contexto y las celdas se
+          van llenando a medida que cada fase resuelve (skeleton → valor real). */}
+      {contexto && !sinActividad && (
         <InformeResultado
           contexto={contexto}
           huertos={seccionHuertos}
@@ -458,6 +459,8 @@ export default function InformeGeneralPfaPage() {
           quimico={seccionQuimico}
           cultural={seccionCultural}
           generalidades={seccionGeneralidades}
+          phaseStatus={phaseStatus}
+          generando={generando}
           onDescargarPdf={handleDescargarPdf}
           descargandoPdf={descargandoPdf}
           pdfRestanteMs={pdfRestanteMs}
@@ -477,12 +480,23 @@ interface ResultadoProps {
   quimico: ControlQuimico | null;
   cultural: ControlCultural | null;
   generalidades: Generalidades | null;
+  phaseStatus: Record<PhaseKey, PhaseStatus>;
+  generando: boolean;
   onDescargarPdf: () => void;
   descargandoPdf: boolean;
   pdfRestanteMs: number | null;
 }
 
-function InformeResultado({ contexto, huertos, trampeo, muestreo, quimico, cultural, generalidades, onDescargarPdf, descargandoPdf, pdfRestanteMs }: ResultadoProps) {
+// Contexto para que Fila sepa en qué estado está su tarjeta sin pasar la prop
+// explícitamente en cada llamada (hay ~30 filas y queremos que el JSX siga limpio).
+const CardStatusContext = createContext<PhaseStatus>('done');
+
+function InformeResultado({
+  contexto, huertos, trampeo, muestreo, quimico, cultural, generalidades,
+  phaseStatus, generando,
+  onDescargarPdf, descargandoPdf, pdfRestanteMs,
+}: ResultadoProps) {
+  const pdfBloqueado = generando || descargandoPdf;
   return (
     <>
       <section className="rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/10 p-4 sm:p-5 flex items-start justify-between gap-4 flex-wrap">
@@ -497,8 +511,9 @@ function InformeResultado({ contexto, huertos, trampeo, muestreo, quimico, cultu
         <button
           type="button"
           onClick={onDescargarPdf}
-          disabled={descargandoPdf}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-90 disabled:cursor-not-allowed text-white text-sm font-semibold whitespace-nowrap min-w-[220px] justify-center"
+          disabled={pdfBloqueado}
+          title={generando ? 'Esperando a que terminen todas las fases...' : undefined}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-semibold whitespace-nowrap min-w-[220px] justify-center"
         >
           {descargandoPdf ? (
             <>
@@ -506,6 +521,11 @@ function InformeResultado({ contexto, huertos, trampeo, muestreo, quimico, cultu
               {pdfRestanteMs !== null && pdfRestanteMs > 500
                 ? <>Generando PDF · <span className="tabular-nums">{Math.ceil(pdfRestanteMs / 1000)}s</span></>
                 : 'Finalizando PDF...'}
+            </>
+          ) : generando ? (
+            <>
+              <span className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              Esperando datos...
             </>
           ) : (
             <>
@@ -517,7 +537,7 @@ function InformeResultado({ contexto, huertos, trampeo, muestreo, quimico, cultu
       </section>
 
       {/* I */}
-      <Card roman="I" titulo="Huertos atendidos" icon="forest">
+      <Card roman="I" titulo="Huertos atendidos" icon="forest" status={phaseStatus['huertos']}>
         <Fila c="Huertos atendidos"          u="Huertos"    v={fInt(huertos?.huertos_atendidos)} />
         <Fila c="I.1 Superficie atendida"    u="Hectáreas"  v={fDec(huertos?.superficie_ha)} />
         <Fila c="I.2 Huertos en alta prevalencia"  u="Huertos" v={fInt(huertos?.huertos_alta_prevalencia)} />
@@ -526,7 +546,7 @@ function InformeResultado({ contexto, huertos, trampeo, muestreo, quimico, cultu
       </Card>
 
       {/* II */}
-      <Card roman="II" titulo="Trampeo" icon="track_changes">
+      <Card roman="II" titulo="Trampeo" icon="track_changes" status={phaseStatus['trampeo']}>
         <Fila c="II.1 Trampas instaladas"        u="Trampas"  v={`${fInt(trampeo?.trampas_instaladas_total)} × ${trampeo?.semanas_en_rango ?? 0} sem = ${fInt(trampeo?.trampas_instaladas_x_semanas)}`} />
         <Fila c="II.2 Trampas revisadas"         u="Trampas"  v={fInt(trampeo?.trampas_revisadas)} />
         <Fila c="II.3 Porcentaje de revisadas"   u="%"        v={fPct(trampeo?.porcentaje_revisadas)} />
@@ -537,7 +557,7 @@ function InformeResultado({ contexto, huertos, trampeo, muestreo, quimico, cultu
       </Card>
 
       {/* III */}
-      <Card roman="III" titulo="Muestreo de frutos" icon="science">
+      <Card roman="III" titulo="Muestreo de frutos" icon="science" status={phaseStatus['muestreo']}>
         <Fila c="III.1 Muestreos tomados"         u="Muestreos" v={fInt(muestreo?.muestreos_tomados)} />
         <Fila c="III.2 Muestreos con larva"       u="Muestreos" v={fInt(muestreo?.muestreos_con_larva)} />
         <Fila c="III.3 Larvas / kilogramo (suma)" u="L/KG"      v={fDec(muestreo?.larvas_por_kg, 2)} />
@@ -545,7 +565,7 @@ function InformeResultado({ contexto, huertos, trampeo, muestreo, quimico, cultu
       </Card>
 
       {/* IV */}
-      <Card roman="IV" titulo="Control químico" icon="sanitizer">
+      <Card roman="IV" titulo="Control químico" icon="sanitizer" status={phaseStatus['control-quimico']}>
         <Fila c="IV.1 Hectáreas asperjadas"  u="Hectáreas"  v={fDec(quimico?.hectareas_asperjadas)} />
         <Fila c="IV.2 Litros asperjados"     u="Litros"     v={(quimico?.litros_asperjados ?? 0).toFixed(2)} />
         <Fila c="IV.3 Estaciones cebo"       u="Estaciones" v={fInt(quimico?.estaciones_cebo)} />
@@ -553,14 +573,14 @@ function InformeResultado({ contexto, huertos, trampeo, muestreo, quimico, cultu
       </Card>
 
       {/* V */}
-      <Card roman="V" titulo="Control mecánico-cultural" icon="agriculture">
+      <Card roman="V" titulo="Control mecánico-cultural" icon="agriculture" status={phaseStatus['control-cultural']}>
         <Fila c="V.1 Kgs de frutos destruidos" u="Kg"         v={(cultural?.kgs_destruidos ?? 0).toFixed(2)} />
         <Fila c="V.2 Árboles eliminados"       u="Árboles"    v={fInt(cultural?.arboles_eliminados)} />
         <Fila c="V.3 Hectáreas rastreadas"     u="Hectáreas"  v={fDec(cultural?.hectareas_rastreadas)} />
       </Card>
 
       {/* VI */}
-      <Card roman="VI" titulo="Generalidades (TMIMF)" icon="local_shipping">
+      <Card roman="VI" titulo="Generalidades (TMIMF)" icon="local_shipping" status={phaseStatus['generalidades']}>
         <Fila c="VI.1 TMIMF emitidas"                  u="Emitidas"   v={fInt(generalidades?.tmimf_emitidas)} />
         <Fila c="VI.2 Toneladas movilizadas"            u="Toneladas"  v={fTon(generalidades?.toneladas_movilizadas)} />
         <Fila c="VI.3 Embarques para exportación"       u="Embarques"  v={fInt(generalidades?.embarques_exportacion)} />
@@ -572,30 +592,64 @@ function InformeResultado({ contexto, huertos, trampeo, muestreo, quimico, cultu
   );
 }
 
-function Card({ roman, titulo, icon, children }: { roman: string; titulo: string; icon: string; children: React.ReactNode }) {
+function Card({ roman, titulo, icon, status, children }: { roman: string; titulo: string; icon: string; status: PhaseStatus; children: React.ReactNode }) {
+  const loading = status === 'loading' || status === 'pending';
+  const error = status === 'error';
+  const headerIconBg =
+    error ? 'bg-rose-100 dark:bg-rose-900/30' :
+    loading ? 'bg-slate-200 dark:bg-slate-700' :
+    'bg-emerald-100 dark:bg-emerald-900/30';
+  const headerIconFg =
+    error ? 'text-rose-700 dark:text-rose-300' :
+    loading ? 'text-slate-500 dark:text-slate-400' :
+    'text-emerald-700 dark:text-emerald-400';
+  const borderCls =
+    error ? 'border-rose-300 dark:border-rose-700' :
+    loading ? 'border-slate-200 dark:border-slate-800' :
+    'border-emerald-200/70 dark:border-emerald-900/40';
   return (
-    <section className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
-      <header className="px-5 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 flex items-center gap-3">
-        <div className="size-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-          <Icon name={icon} className="text-amber-700 dark:text-amber-400 text-lg" />
-        </div>
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
-          <span className="text-amber-700 dark:text-amber-400 mr-2">{roman}.</span>{titulo}
-        </h2>
-      </header>
-      <table className="w-full text-sm">
-        <tbody>{children}</tbody>
-      </table>
-    </section>
+    <CardStatusContext.Provider value={status}>
+      <section className={`rounded-xl border ${borderCls} bg-white dark:bg-slate-900 overflow-hidden transition-colors`}>
+        <header className="px-5 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 flex items-center gap-3">
+          <div className={`size-8 rounded-lg ${headerIconBg} flex items-center justify-center transition-colors`}>
+            {loading ? (
+              <span className="size-4 border-2 border-slate-400/30 border-t-slate-500 dark:border-slate-300/30 dark:border-t-slate-200 rounded-full animate-spin" />
+            ) : (
+              <Icon name={error ? 'error' : icon} className={`text-lg ${headerIconFg}`} />
+            )}
+          </div>
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 uppercase tracking-wide flex-1">
+            <span className={`mr-2 ${error ? 'text-rose-700 dark:text-rose-400' : 'text-amber-700 dark:text-amber-400'}`}>{roman}.</span>{titulo}
+          </h2>
+          {!loading && !error && (
+            <Icon name="check_circle" className="text-emerald-500 text-base" />
+          )}
+        </header>
+        <table className="w-full text-sm">
+          <tbody>{children}</tbody>
+        </table>
+      </section>
+    </CardStatusContext.Provider>
   );
 }
 
 function Fila({ c, u, v, highlight = false }: { c: string; u: string; v: string; highlight?: boolean }) {
+  const status = useContext(CardStatusContext);
+  const loading = status === 'loading' || status === 'pending';
+  const error = status === 'error';
   return (
-    <tr className={`border-t border-slate-100 dark:border-slate-800 ${highlight ? 'bg-amber-50/60 dark:bg-amber-900/10' : ''}`}>
+    <tr className={`border-t border-slate-100 dark:border-slate-800 ${highlight && !loading ? 'bg-amber-50/60 dark:bg-amber-900/10' : ''}`}>
       <td className="px-5 py-2.5 text-slate-700 dark:text-slate-300">{c}</td>
       <td className="px-5 py-2.5 text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">{u}</td>
-      <td className="px-5 py-2.5 text-right font-semibold text-slate-900 dark:text-slate-100 tabular-nums whitespace-nowrap">{v}</td>
+      <td className="px-5 py-2.5 text-right whitespace-nowrap">
+        {loading ? (
+          <span className="inline-block h-4 w-20 rounded bg-slate-200 dark:bg-slate-700 animate-pulse align-middle" />
+        ) : error ? (
+          <span className="text-rose-500 text-xs italic">sin dato</span>
+        ) : (
+          <span className="font-semibold text-slate-900 dark:text-slate-100 tabular-nums animate-fade-in">{v}</span>
+        )}
+      </td>
     </tr>
   );
 }
