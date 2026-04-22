@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Icon from '@/components/ui/Icon';
 import { useLegacyAuth } from '@/context/LegacyAuthContext';
 
@@ -84,6 +84,9 @@ export default function InformeGeneralPfaPage() {
   const [contexto, setContexto] = useState<{ pfa: PfaOption; sIni: SemanaOption; sFin: SemanaOption } | null>(null);
   const [descargandoPdf, setDescargandoPdf] = useState(false);
   const [rangoError, setRangoError] = useState('');
+  const [duracionReporteMs, setDuracionReporteMs] = useState<number | null>(null);
+  const [pdfRestanteMs, setPdfRestanteMs] = useState<number | null>(null);
+  const pdfIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Carga inicial de catálogos
   useEffect(() => {
@@ -165,8 +168,10 @@ export default function InformeGeneralPfaPage() {
     resetData();
     setContexto({ pfa: pfaSel, sIni: sIniSel, sFin: sFinSel });
     setGenerando(true);
+    setDuracionReporteMs(null);
 
     const qs = `pfa_folio=${pfaFolio}&semana_inicio=${semIni}&semana_fin=${semFin}`;
+    const t0 = performance.now();
 
     try {
       // Gate: ¿tiene actividad?
@@ -231,12 +236,24 @@ export default function InformeGeneralPfaPage() {
       // Garantiza que el botón siempre vuelve al estado original,
       // aunque alguna fase haya tirado un error no capturado.
       setGenerando(false);
+      setDuracionReporteMs(performance.now() - t0);
     }
   };
 
   const handleDescargarPdf = async () => {
     if (!token || !contexto) return;
     setDescargandoPdf(true);
+
+    // ETA: asumimos que el PDF tarda ~lo mismo que la generación en pantalla.
+    // Fallback razonable si por alguna razón no tenemos medición previa.
+    const estimateMs = Math.max(duracionReporteMs ?? 5000, 2000);
+    const startedAt = performance.now();
+    setPdfRestanteMs(estimateMs);
+    pdfIntervalRef.current = setInterval(() => {
+      const elapsed = performance.now() - startedAt;
+      setPdfRestanteMs(Math.max(0, estimateMs - elapsed));
+    }, 100);
+
     try {
       const qs = `pfa_folio=${contexto.pfa.folio}&semana_inicio=${contexto.sIni.folio}&semana_fin=${contexto.sFin.folio}`;
       const res = await fetch(`${API_BASE}/legacy/reportes/informe-general/pdf?${qs}`, {
@@ -258,9 +275,21 @@ export default function InformeGeneralPfaPage() {
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error al descargar PDF');
     } finally {
+      if (pdfIntervalRef.current) {
+        clearInterval(pdfIntervalRef.current);
+        pdfIntervalRef.current = null;
+      }
+      setPdfRestanteMs(null);
       setDescargandoPdf(false);
     }
   };
+
+  // Limpia el interval si el componente se desmonta mientras descarga
+  useEffect(() => {
+    return () => {
+      if (pdfIntervalRef.current) clearInterval(pdfIntervalRef.current);
+    };
+  }, []);
 
   const phasesDone = Object.values(phaseStatus).filter((s) => s === 'done').length;
   const phasesTotal = PHASES.length;
@@ -445,6 +474,7 @@ export default function InformeGeneralPfaPage() {
           hallazgos={hallazgos}
           onDescargarPdf={handleDescargarPdf}
           descargandoPdf={descargandoPdf}
+          pdfRestanteMs={pdfRestanteMs}
         />
       )}
     </div>
@@ -464,13 +494,14 @@ interface ResultadoProps {
   hallazgos: Hallazgos | null;
   onDescargarPdf: () => void;
   descargandoPdf: boolean;
+  pdfRestanteMs: number | null;
 }
 
 const STATUS_REV_LABEL: Record<number, string> = {
   1: 'Revisada', 2: 'Con captura', 6: 'Extemporánea',
 };
 
-function InformeResultado({ contexto, huertos, trampeo, muestreo, quimico, cultural, generalidades, hallazgos, onDescargarPdf, descargandoPdf }: ResultadoProps) {
+function InformeResultado({ contexto, huertos, trampeo, muestreo, quimico, cultural, generalidades, hallazgos, onDescargarPdf, descargandoPdf, pdfRestanteMs }: ResultadoProps) {
   return (
     <>
       <section className="rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/10 p-4 sm:p-5 flex items-start justify-between gap-4 flex-wrap">
@@ -486,12 +517,14 @@ function InformeResultado({ contexto, huertos, trampeo, muestreo, quimico, cultu
           type="button"
           onClick={onDescargarPdf}
           disabled={descargandoPdf}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold whitespace-nowrap"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-90 disabled:cursor-not-allowed text-white text-sm font-semibold whitespace-nowrap min-w-[220px] justify-center"
         >
           {descargandoPdf ? (
             <>
               <span className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Generando PDF...
+              {pdfRestanteMs !== null && pdfRestanteMs > 500
+                ? <>Generando PDF · <span className="tabular-nums">{Math.ceil(pdfRestanteMs / 1000)}s</span></>
+                : 'Finalizando PDF...'}
             </>
           ) : (
             <>
