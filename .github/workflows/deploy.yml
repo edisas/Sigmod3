@@ -1,0 +1,120 @@
+name: Deploy SIGMOD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  BACK_REMOTE_PATH: /var/www/vhosts/sigmod.mx/api3
+  FRONT_REMOTE_PATH: /var/www/vhosts/sigmod.mx/v3
+
+jobs:
+  # ──────────────────────────────────────────────────────────
+  #  Backend  →  api3.sigmod.mx
+  # ──────────────────────────────────────────────────────────
+  deploy-backend:
+    name: Deploy backend (api3.sigmod.mx)
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python setup
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: back/requirements.txt
+
+      - name: Smoke test (dependencias + import del app)
+        run: |
+          python -m venv /tmp/venv
+          /tmp/venv/bin/pip install -r back/requirements.txt
+          PYTHONPATH=back /tmp/venv/bin/python -c "from app.main import app; print('OK', len(app.routes), 'routes')"
+
+      - name: Cargar SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p ${{ secrets.DEPLOY_SSH_PORT || '22' }} ${{ secrets.DEPLOY_SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Sincronizar código (rsync)
+        run: |
+          rsync -azv --delete \
+            --exclude='.venv/' \
+            --exclude='__pycache__/' \
+            --exclude='.env' \
+            --exclude='.env.example' \
+            --exclude='storage/' \
+            --exclude='tests/' \
+            -e "ssh -p ${{ secrets.DEPLOY_SSH_PORT || '22' }}" \
+            back/ ${{ secrets.DEPLOY_SSH_USER }}@${{ secrets.DEPLOY_SSH_HOST }}:${{ env.BACK_REMOTE_PATH }}/
+
+      - name: pip install + migraciones + restart
+        run: |
+          ssh -p ${{ secrets.DEPLOY_SSH_PORT || '22' }} \
+              ${{ secrets.DEPLOY_SSH_USER }}@${{ secrets.DEPLOY_SSH_HOST }} \
+              "bash -lc 'set -e
+                cd ${{ env.BACK_REMOTE_PATH }}
+                [ -d .venv ] || python3 -m venv .venv
+                .venv/bin/pip install --upgrade pip
+                .venv/bin/pip install -r requirements.txt
+                .venv/bin/python migrate.py apply
+                mkdir -p tmp
+                touch tmp/restart.txt
+                mkdir -p storage/solicitudes_generadas storage/solicitudes_firmadas storage/figura_cooperadora_autorizaciones storage/figura_cooperadora_revocaciones storage/system
+              '"
+
+  # ──────────────────────────────────────────────────────────
+  #  Frontend  →  v3.sigmod.mx
+  # ──────────────────────────────────────────────────────────
+  deploy-frontend:
+    name: Deploy frontend (v3.sigmod.mx)
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node setup
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: front/package-lock.json
+
+      - name: Instalar dependencias
+        working-directory: front
+        run: npm ci
+
+      - name: Build de producción
+        working-directory: front
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_TURNSTILE_ENABLED: ${{ secrets.VITE_TURNSTILE_ENABLED }}
+          VITE_TURNSTILE_SITE_KEY: ${{ secrets.VITE_TURNSTILE_SITE_KEY }}
+        run: npm run build
+
+      - name: Cargar SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p ${{ secrets.DEPLOY_SSH_PORT || '22' }} ${{ secrets.DEPLOY_SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Sincronizar dist (rsync)
+        run: |
+          rsync -azv --delete \
+            -e "ssh -p ${{ secrets.DEPLOY_SSH_PORT || '22' }}" \
+            front/dist/ ${{ secrets.DEPLOY_SSH_USER }}@${{ secrets.DEPLOY_SSH_HOST }}:${{ env.FRONT_REMOTE_PATH }}/

@@ -1,0 +1,32 @@
+from datetime import datetime, timedelta, timezone
+
+from jose import JWTError, jwt
+
+from app.core.config import get_settings
+
+ALGORITHM = "HS256"
+LEGACY_SCOPE = "legacy"
+
+
+def create_legacy_token(user_id: int, legacy_db: str, nivel: int) -> str:
+    settings = get_settings()
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.legacy_token_expire_minutes)
+    payload = {
+        "sub": str(user_id),
+        "legacy_db": legacy_db,
+        "nivel": nivel,
+        "scope": LEGACY_SCOPE,
+        "exp": expire,
+    }
+    return jwt.encode(payload, settings.legacy_secret_key, algorithm=ALGORITHM)
+
+
+def decode_legacy_token(token: str) -> dict | None:
+    settings = get_settings()
+    try:
+        payload = jwt.decode(token, settings.legacy_secret_key, algorithms=[ALGORITHM])
+    except JWTError:
+        return None
+    if payload.get("scope") != LEGACY_SCOPE:
+        return None
+    return payload

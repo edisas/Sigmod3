@@ -1,0 +1,56 @@
+# ──────────────────────────────────────────────────────────
+# Solo se versiona: back/, front/, .github/, .gitignore
+# Todo lo demás en la raíz queda fuera.
+# ──────────────────────────────────────────────────────────
+
+# Carpetas de trabajo local / referencia (no se versionan)
+sigmodLegacy/
+docsRefactor/
+logs/
+
+# Docs locales (no se publican al repo)
+MEMORIA.md
+ROADMAP.md
+DEPLOY.md
+
+# Entornos
+.env
+.env.local
+.env.*.local
+back/.env
+front/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+back/.venv/
+
+# Runtime del backend (PDFs, oficios, assets del sistema)
+back/storage/**
+!back/storage/.gitkeep
+
+# Node / frontend
+node_modules/
+front/dist/
+front/.vite/
+front/tsconfig.tsbuildinfo
+
+# Sistema
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.idea/
+.vscode/
+.claude/
+*.code-workspace

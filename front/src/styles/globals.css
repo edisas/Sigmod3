@@ -1,0 +1,67 @@
+@import url('https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary: 1 68 33;
+  --color-secondary: 135 206 235;
+  --color-accent: 152 255 152;
+  --color-neutral-gray: 211 211 211;
+  --color-background-light: 248 253 250;
+  --color-background-dark: 1 26 13;
+  --color-soft-gray: 211 211 211;
+  --color-mint: 152 255 152;
+  --color-sky-blue: 135 206 235;
+}
+
+@layer base {
+  body {
+    @apply font-display bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 antialiased;
+  }
+
+  .material-symbols-outlined {
+    font-family: 'Material Symbols Outlined';
+    font-style: normal;
+    font-weight: normal;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    white-space: nowrap;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary hover:bg-primary/90 text-white font-bold rounded-xl transition-all shadow-sm active:scale-[0.98];
+  }
+
+  .btn-secondary {
+    @apply bg-white dark:bg-white/5 border border-neutral-gray dark:border-primary/30 text-slate-700 dark:text-slate-200 font-semibold rounded-xl hover:bg-neutral-gray/10 transition-all;
+  }
+
+  .card {
+    @apply bg-white dark:bg-white/5 rounded-2xl border border-neutral-gray/20 shadow-sm;
+  }
+
+  .input-field {
+    @apply w-full rounded-xl border-0 py-3.5 px-4 text-slate-900 dark:text-slate-100 shadow-sm ring-1 ring-inset ring-slate-300 dark:ring-slate-700 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary bg-white dark:bg-slate-800 text-sm leading-6 transition-shadow;
+  }
+}
+
+@layer utilities {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(1, 68, 33, 0.2);
+    border-radius: 10px;
+  }
+}
