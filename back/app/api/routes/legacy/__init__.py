@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes.legacy import auth, dashboard, informe_general, reportes
+from app.api.routes.legacy import auth, catalogos, dashboard, informe_general, reportes
 
 router = APIRouter()
 router.include_router(auth.router, prefix="/auth", tags=["legacy-auth"])
@@ -11,3 +11,4 @@ router.include_router(
     prefix="/reportes/informe-general",
     tags=["legacy-informe-general"],
 )
+router.include_router(catalogos.router, prefix="/catalogos", tags=["legacy-catalogos"])

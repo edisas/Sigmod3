@@ -24,6 +24,14 @@ const isGroup = (node: NavNode): node is NavGroup => 'children' in node;
 const navTree: NavNode[] = [
   { to: '/legacy', icon: 'dashboard', label: 'Dashboard' },
   {
+    id: 'catalogos',
+    icon: 'folder_managed',
+    label: 'Catálogos',
+    children: [
+      { to: '/legacy/catalogos/rutas', icon: 'alt_route', label: 'Rutas' },
+    ],
+  },
+  {
     id: 'reportes',
     icon: 'summarize',
     label: 'Reportes',
