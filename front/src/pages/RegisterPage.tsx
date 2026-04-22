@@ -127,7 +127,11 @@ export default function RegisterPage() {
       rolId: Number(formData.rolId),
       figuraCooperadoraId: formData.figuraCooperadoraId ? Number(formData.figuraCooperadoraId) : null,
     });
-    if (result.success) navigate(result.redirectTo || '/solicitud-acceso?new=1');
+    if (result.success) {
+      navigate(result.redirectTo || '/solicitud-acceso?new=1');
+    } else {
+      setErrors((prev) => ({ ...prev, submit: result.error ?? 'No se pudo completar el registro.' }));
+    }
   };
 
   const fieldClass = (field: string) =>
@@ -367,6 +371,13 @@ export default function RegisterPage() {
                 </label>
               </div>
               {errors.acceptTerms && <p className="text-xs text-red-500">{errors.acceptTerms}</p>}
+
+              {errors.submit && (
+                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 flex items-center gap-2">
+                  <Icon name="error" className="text-red-500 text-lg shrink-0" />
+                  {errors.submit}
+                </div>
+              )}
 
               <button
                 type="submit"

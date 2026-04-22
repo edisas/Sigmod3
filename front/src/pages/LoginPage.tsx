@@ -49,7 +49,7 @@ export default function LoginPage() {
     if (result.success) {
       navigate(result.redirectTo || '/');
     } else {
-      setError('Credenciales incorrectas.');
+      setError(result.error ?? 'Credenciales incorrectas.');
     }
   };
 

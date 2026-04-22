@@ -1,8 +1,14 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { User, AuthState } from '@/types';
 
+interface LoginResult {
+  success: boolean;
+  redirectTo: string;
+  error?: string;
+}
+
 interface AuthContextType extends AuthState {
-  login: (nombreUsuario: string, password: string) => Promise<{ success: boolean; redirectTo: string }>;
+  login: (nombreUsuario: string, password: string) => Promise<LoginResult>;
   logout: () => void;
   register: (data: {
     fullName: string;
@@ -11,7 +17,7 @@ interface AuthContextType extends AuthState {
     estadosIds: number[];
     rolId: number;
     figuraCooperadoraId?: number | null;
-  }) => Promise<{ success: boolean; redirectTo: string }>;
+  }) => Promise<LoginResult>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -64,6 +70,32 @@ function toUser(raw: ApiUser): User {
   };
 }
 
+class ApiError extends Error {
+  status: number;
+  retryAfter?: number;
+  constructor(message: string, status: number, retryAfter?: number) {
+    super(message);
+    this.status = status;
+    this.retryAfter = retryAfter;
+  }
+}
+
+function describeAuthError(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) {
+    if (err.status === 429) {
+      return err.message || 'Demasiados intentos. Espera unos minutos antes de volver a intentarlo.';
+    }
+    if (err.status === 401 || err.status === 403) {
+      return err.message || fallback;
+    }
+    if (err.status >= 500) {
+      return 'El servidor no está respondiendo. Intenta en unos momentos.';
+    }
+    return err.message || fallback;
+  }
+  return fallback;
+}
+
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: {
@@ -74,7 +106,15 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(`API_ERROR_${response.status}`);
+    let detail = `API_ERROR_${response.status}`;
+    try {
+      const body = (await response.json()) as { detail?: string };
+      if (body?.detail) detail = body.detail;
+    } catch {
+      // keep default
+    }
+    const retryAfter = Number(response.headers.get('Retry-After')) || undefined;
+    throw new ApiError(detail, response.status, retryAfter);
   }
 
   return (await response.json()) as T;
@@ -111,7 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void bootstrap();
   }, []);
 
-  const login = useCallback(async (nombreUsuario: string, password: string): Promise<{ success: boolean; redirectTo: string }> => {
+  const login = useCallback(async (nombreUsuario: string, password: string): Promise<LoginResult> => {
     setState((prev) => ({ ...prev, isLoading: true }));
     try {
       const data = await apiRequest<AuthApiResponse>('/auth/login', {
@@ -151,9 +191,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         redirectTo = '/';
       }
       return { success: true, redirectTo };
-    } catch {
+    } catch (err) {
       setState((prev) => ({ ...prev, isLoading: false }));
-      return { success: false, redirectTo: '/login' };
+      const error = describeAuthError(err, 'Credenciales incorrectas.');
+      return { success: false, redirectTo: '/login', error };
     }
   }, []);
 
@@ -169,7 +210,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     estadosIds: number[];
     rolId: number;
     figuraCooperadoraId?: number | null;
-  }): Promise<{ success: boolean; redirectTo: string }> => {
+  }): Promise<LoginResult> => {
     setState((prev) => ({ ...prev, isLoading: true }));
     try {
       const response = await apiRequest<AuthApiResponse>('/auth/register', {
@@ -204,9 +245,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(TOKEN_KEY, accessToken);
       setState({ user: toUser(response.user), isAuthenticated: true, isLoading: false });
       return { success: true, redirectTo: '/solicitud-acceso?new=1' };
-    } catch {
+    } catch (err) {
       setState((prev) => ({ ...prev, isLoading: false }));
-      return { success: false, redirectTo: '/register' };
+      const error = describeAuthError(err, 'No se pudo completar el registro.');
+      return { success: false, redirectTo: '/register', error };
     }
   }, []);
 
