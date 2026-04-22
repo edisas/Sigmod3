@@ -11,7 +11,9 @@ interface SemanaOption { folio: number; no_semana: number; periodo: number; labe
 
 interface Huertos { huertos_atendidos: number; superficie_ha: number; huertos_alta_prevalencia: number; huertos_baja_prevalencia: number; huertos_nula_prevalencia: number }
 interface Trampeo { trampas_instaladas_total: number; semanas_en_rango: number; trampas_instaladas_x_semanas: number; trampas_revisadas: number; porcentaje_revisadas: number; trampas_con_mosca_fertil: number; trampas_con_mosca_esteril: number; dias_exposicion_promedio: number; mtd_region: number }
-interface Muestreo { muestreos_tomados: number; muestreos_con_larva: number; larvas_por_kg: number; frutos_muestreados: number; frutos_infestados: number }
+interface Muestreo { muestreos_tomados: number; muestreos_con_larva: number; larvas_por_kg: number; kg_fruta_muestreada: number }
+interface Hallazgo { numeroinscripcion: string; no_trampa: string; no_semana: number; fecha_revision: string | null; status_revision: number }
+interface Hallazgos { total: number; items: Hallazgo[] }
 interface ControlQuimico { hectareas_asperjadas: number; litros_asperjados: number; estaciones_cebo: number; huertos_con_control: number }
 interface ControlCultural { kgs_destruidos: number; arboles_eliminados: number; hectareas_rastreadas: number }
 interface Generalidades { tmimf_emitidas: number; toneladas_movilizadas: number; embarques_exportacion: number; embarques_nacional: number; toneladas_exportacion: number; toneladas_nacional: number }
@@ -75,6 +77,8 @@ export default function InformeGeneralPfaPage() {
   const [seccionQuimico, setSeccionQuimico] = useState<ControlQuimico | null>(null);
   const [seccionCultural, setSeccionCultural] = useState<ControlCultural | null>(null);
   const [seccionGeneralidades, setSeccionGeneralidades] = useState<Generalidades | null>(null);
+  const [hallazgos, setHallazgos] = useState<Hallazgos | null>(null);
+  const [sinActividad, setSinActividad] = useState(false);
 
   const [contexto, setContexto] = useState<{ pfa: PfaOption; sIni: SemanaOption; sFin: SemanaOption } | null>(null);
   const [descargandoPdf, setDescargandoPdf] = useState(false);
@@ -112,6 +116,8 @@ export default function InformeGeneralPfaPage() {
   const resetData = () => {
     setSeccionHuertos(null); setSeccionTrampeo(null); setSeccionMuestreo(null);
     setSeccionQuimico(null); setSeccionCultural(null); setSeccionGeneralidades(null);
+    setHallazgos(null);
+    setSinActividad(false);
     setPhaseStatus({
       'huertos': 'pending', 'trampeo': 'pending', 'muestreo': 'pending',
       'control-quimico': 'pending', 'control-cultural': 'pending', 'generalidades': 'pending',
@@ -138,13 +144,30 @@ export default function InformeGeneralPfaPage() {
     setContexto({ pfa: pfaSel, sIni: sIniSel, sFin: sFinSel });
     setGenerando(true);
 
+    const qs = `pfa_folio=${pfaFolio}&semana_inicio=${semIni}&semana_fin=${semFin}`;
+
+    // Gate: ¿tiene actividad?
+    try {
+      const r = await fetch(`${API_BASE}/legacy/reportes/informe-general/tiene-actividad?${qs}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (r.ok) {
+        const { tiene_actividad } = (await r.json()) as { tiene_actividad: boolean };
+        if (!tiene_actividad) {
+          setSinActividad(true);
+          setGenerando(false);
+          return;
+        }
+      }
+    } catch {
+      // si el gate falla, seguimos y dejamos que los endpoints propios reporten
+    }
+
     // Marca todos en loading
     setPhaseStatus({
       'huertos': 'loading', 'trampeo': 'loading', 'muestreo': 'loading',
       'control-quimico': 'loading', 'control-cultural': 'loading', 'generalidades': 'loading',
     });
-
-    const qs = `pfa_folio=${pfaFolio}&semana_inicio=${semIni}&semana_fin=${semFin}`;
 
     const fetchPhase = async <T,>(phase: PhaseKey, ep: string, setter: (d: T) => void) => {
       try {
@@ -172,6 +195,16 @@ export default function InformeGeneralPfaPage() {
       fetchPhase<ControlCultural>('control-cultural', 'control-cultural', setSeccionCultural),
       fetchPhase<Generalidades>('generalidades', 'generalidades', setSeccionGeneralidades),
     ]);
+
+    // Hallazgos — no bloqueante, se carga en paralelo al final
+    try {
+      const r = await fetch(`${API_BASE}/legacy/reportes/informe-general/hallazgos-trampeo?${qs}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (r.ok) setHallazgos((await r.json()) as Hallazgos);
+    } catch {
+      // silencioso
+    }
 
     setGenerando(false);
   };
@@ -345,8 +378,24 @@ export default function InformeGeneralPfaPage() {
         </section>
       )}
 
+      {/* Sin actividad */}
+      {contexto && sinActividad && !generando && (
+        <section className="rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/10 p-6 text-center">
+          <Icon name="info" className="text-amber-600 text-4xl mb-2 inline-block" />
+          <p className="text-base font-semibold text-slate-900 dark:text-slate-100">
+            {contexto.pfa.nombre} no tiene TMIMF emitida en este período.
+          </p>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+            {contexto.sIni.label} → {contexto.sFin.label}
+          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">
+            Sin información disponible para generar el informe.
+          </p>
+        </section>
+      )}
+
       {/* Resultado del informe */}
-      {contexto && phasesDone === phasesTotal && (
+      {contexto && !sinActividad && phasesDone === phasesTotal && (
         <InformeResultado
           contexto={contexto}
           huertos={seccionHuertos}
@@ -355,6 +404,7 @@ export default function InformeGeneralPfaPage() {
           quimico={seccionQuimico}
           cultural={seccionCultural}
           generalidades={seccionGeneralidades}
+          hallazgos={hallazgos}
           onDescargarPdf={handleDescargarPdf}
           descargandoPdf={descargandoPdf}
         />
@@ -373,11 +423,16 @@ interface ResultadoProps {
   quimico: ControlQuimico | null;
   cultural: ControlCultural | null;
   generalidades: Generalidades | null;
+  hallazgos: Hallazgos | null;
   onDescargarPdf: () => void;
   descargandoPdf: boolean;
 }
 
-function InformeResultado({ contexto, huertos, trampeo, muestreo, quimico, cultural, generalidades, onDescargarPdf, descargandoPdf }: ResultadoProps) {
+const STATUS_REV_LABEL: Record<number, string> = {
+  1: 'Revisada', 2: 'Con captura', 6: 'Extemporánea',
+};
+
+function InformeResultado({ contexto, huertos, trampeo, muestreo, quimico, cultural, generalidades, hallazgos, onDescargarPdf, descargandoPdf }: ResultadoProps) {
   return (
     <>
       <section className="rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/10 p-4 sm:p-5 flex items-start justify-between gap-4 flex-wrap">
@@ -431,11 +486,10 @@ function InformeResultado({ contexto, huertos, trampeo, muestreo, quimico, cultu
 
       {/* III */}
       <Card roman="III" titulo="Muestreo de frutos" icon="science">
-        <Fila c="III.1 Muestreos tomados"    u="Muestreos" v={fInt(muestreo?.muestreos_tomados)} />
-        <Fila c="III.2 Muestreos con larva"  u="Muestreos" v={fInt(muestreo?.muestreos_con_larva)} />
-        <Fila c="III.3 Larvas / kilogramo"   u="L/KG"      v={fDec(muestreo?.larvas_por_kg)} />
-        <Fila c="III.4 Frutos muestreados"   u="Frutos"    v={fInt(muestreo?.frutos_muestreados)} />
-        <Fila c="III.5 Frutos infestados"    u="Frutos"    v={fInt(muestreo?.frutos_infestados)} />
+        <Fila c="III.1 Muestreos tomados"         u="Muestreos" v={fInt(muestreo?.muestreos_tomados)} />
+        <Fila c="III.2 Muestreos con larva"       u="Muestreos" v={fInt(muestreo?.muestreos_con_larva)} />
+        <Fila c="III.3 Larvas / kilogramo (suma)" u="L/KG"      v={fDec(muestreo?.larvas_por_kg, 2)} />
+        <Fila c="III.4 Kg fruta muestreada"       u="Kg"        v={fDec(muestreo?.kg_fruta_muestreada, 2)} />
       </Card>
 
       {/* IV */}
@@ -462,6 +516,48 @@ function InformeResultado({ contexto, huertos, trampeo, muestreo, quimico, cultu
         <Fila c="VI.5 Toneladas exportación"            u="Toneladas"  v={fTon(generalidades?.toneladas_exportacion)} />
         <Fila c="VI.6 Toneladas nacional"               u="Toneladas"  v={fTon(generalidades?.toneladas_nacional)} />
       </Card>
+
+      {/* Hallazgos (solo si hay) */}
+      {hallazgos && hallazgos.total > 0 && (
+        <section className="rounded-xl border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-900/10 overflow-hidden">
+          <header className="px-5 py-3 border-b border-rose-200 dark:border-rose-800 bg-rose-100/60 dark:bg-rose-900/20 flex items-start gap-3">
+            <Icon name="warning" className="text-rose-600 text-xl shrink-0 mt-0.5" />
+            <div>
+              <h2 className="text-sm font-semibold text-rose-900 dark:text-rose-200 uppercase tracking-wide">
+                Hallazgos: trampeo sin TMIMF asociada
+              </h2>
+              <p className="text-xs text-rose-700 dark:text-rose-300 mt-0.5">
+                {hallazgos.total} revisión{hallazgos.total !== 1 ? 'es' : ''} de trampeo sin TMIMF tipo 'O' correspondiente para el huerto y semana.
+              </p>
+            </div>
+          </header>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-rose-50 dark:bg-rose-900/20 text-rose-900 dark:text-rose-200 text-xs">
+                  <th className="px-3 py-2 text-center font-semibold">Semana</th>
+                  <th className="px-3 py-2 text-left font-semibold">Huerto (inscripción)</th>
+                  <th className="px-3 py-2 text-center font-semibold">Trampa</th>
+                  <th className="px-3 py-2 text-center font-semibold">Fecha revisión</th>
+                  <th className="px-3 py-2 text-center font-semibold">Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {hallazgos.items.map((h, i) => (
+                  <tr key={`${h.no_semana}-${h.numeroinscripcion}-${h.no_trampa}-${i}`}
+                      className={`border-t border-rose-100 dark:border-rose-900/40 ${i % 2 === 1 ? 'bg-rose-50/50 dark:bg-rose-950/20' : ''}`}>
+                    <td className="px-3 py-1.5 text-center tabular-nums">{h.no_semana}</td>
+                    <td className="px-3 py-1.5 font-mono text-xs">{h.numeroinscripcion}</td>
+                    <td className="px-3 py-1.5 text-center font-mono text-xs">{h.no_trampa}</td>
+                    <td className="px-3 py-1.5 text-center text-xs">{h.fecha_revision ?? '—'}</td>
+                    <td className="px-3 py-1.5 text-center text-xs">{STATUS_REV_LABEL[h.status_revision] ?? h.status_revision}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
     </>
   );
 }

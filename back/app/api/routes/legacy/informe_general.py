@@ -1,8 +1,13 @@
 """
 Informe general por PFA (rango de semanas).
 
-6 endpoints independientes (uno por sección) + 1 endpoint `/pdf` que arma
-un reporte PDF formal con logo SENASICA y bloque de firma.
+Fuente principal: TMIMF (tarjeta tipo 'O' con consolidado semanal operativo,
+tarjeta tipo 'M' con movilización y detallado_tmimf). Se complementa con
+consultas a trampas_revision + identificacion (fértil/estéril), control_quimico
+(estaciones cebo) y control_mecanico_cultural (árboles, has rastreadas).
+
+Si no hay TMIMF del PFA en el rango → informe "sin actividad".
+Si hay revisiones de trampeo sin TMIMF 'O' asociada → hallazgos en página aparte.
 """
 
 from datetime import datetime
@@ -13,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm, mm
@@ -72,8 +77,7 @@ class MuestreoSeccion(BaseModel):
     muestreos_tomados: int
     muestreos_con_larva: int
     larvas_por_kg: float
-    frutos_muestreados: int
-    frutos_infestados: int
+    kg_fruta_muestreada: float
 
 
 class ControlQuimicoSeccion(BaseModel):
@@ -96,6 +100,19 @@ class GeneralidadesSeccion(BaseModel):
     embarques_nacional: int
     toneladas_exportacion: float
     toneladas_nacional: float
+
+
+class HallazgoTrampeo(BaseModel):
+    numeroinscripcion: str
+    no_trampa: str
+    no_semana: int
+    fecha_revision: str | None
+    status_revision: int
+
+
+class HallazgosSeccion(BaseModel):
+    total: int
+    items: list[HallazgoTrampeo]
 
 
 class PfaInfo(BaseModel):
@@ -143,48 +160,80 @@ def _get_semana_info(session: Session, folio: int) -> dict | None:
     return dict(row) if row else None
 
 
+def _tiene_actividad(session: Session, params: dict) -> bool:
+    """True si el PFA tiene al menos una TMIMF (tipo O o M) en el rango."""
+    n = session.execute(text("""
+        SELECT COUNT(*) FROM tmimf
+        WHERE clave_aprobado = :pfa AND status = 'A'
+          AND CAST(NULLIF(semana,'') AS UNSIGNED) BETWEEN :s_ini AND :s_fin
+    """), params).scalar()
+    return int(n or 0) > 0
+
+
 # ──────────────────────────────────────────────────────────────────────
-# Builders (reutilizables por endpoint HTTP y por PDF)
+# Agregado principal: TMIMF tipo 'O' por huerto
 # ──────────────────────────────────────────────────────────────────────
 
 
-def _compute_huertos(session: Session, params: dict) -> HuertosSeccion:
-    totales = session.execute(text("""
+def _agregado_tmimf_o(session: Session, params: dict) -> list[dict]:
+    """
+    Devuelve una fila por huerto (numeroinscripcion) con todos los consolidados
+    de sus TMIMF tipo 'O' en el rango. Una query única.
+    """
+    rows = session.execute(text("""
         SELECT
-          COUNT(*)                           AS huertos,
-          COALESCE(SUM(sup_por_huerto), 0)   AS superficie_total
-        FROM (
-            SELECT sv.numeroinscripcion,
-                   COALESCE(SUM(cs.superficie), 0) AS sup_por_huerto
-            FROM sv01_sv02 sv
-            JOIN cat_rutas r                     ON r.folio = sv.folio_ruta
-            LEFT JOIN cat_superficie_registrada cs ON TRIM(cs.numeroinscripcion) = TRIM(sv.numeroinscripcion)
-            WHERE r.clave_pfa = :pfa AND sv.status = 'A'
-            GROUP BY sv.numeroinscripcion
-        ) t
-    """), params).mappings().first()
+          TRIM(tmi.numeroinscripcion)                                   AS ni,
+          SUM(IFNULL(tmi.num_trampas_instaladas, 0))                    AS trampas_instaladas,
+          SUM(IFNULL(tmi.trampas_revisadas, 0))                         AS trampas_revisadas,
+          SUM(IFNULL(tmi.dias_exposicion_trampa, 0))                    AS dias_exposicion_sum,
+          COUNT(*)                                                      AS tmimfs_o,
+          SUM(IFNULL(tmi.mtd_promedio_semanal, 0) * IFNULL(tmi.num_trampas_instaladas, 0)) AS mtd_num,
+          SUM(IFNULL(tmi.num_trampas_instaladas, 0))                    AS mtd_den,
+          SUM(IFNULL(tmi.kg_fruta_muestreada, 0))                       AS kg_muestreada,
+          SUM(IFNULL(tmi.larvas_por_kg_fruta, 0))                       AS larvas_kg_sum,
+          SUM(CASE WHEN IFNULL(tmi.kg_fruta_muestreada, 0) > 0 THEN 1 ELSE 0 END)  AS muestreos_tomados,
+          SUM(CASE WHEN IFNULL(tmi.larvas_por_kg_fruta, 0) > 0 THEN 1 ELSE 0 END)  AS muestreos_con_larva,
+          SUM(IFNULL(tmi.superficie_asperjada, 0))                      AS has_asperjadas,
+          SUM(IFNULL(tmi.litros_mezcla_asperjada, 0))                   AS litros_asperjados,
+          SUM(IFNULL(tmi.kg_fruta_destruida, 0))                        AS kg_destruidos
+        FROM tmimf tmi
+        WHERE tmi.clave_aprobado = :pfa
+          AND tmi.tipo_tarjeta = 'O'
+          AND tmi.status = 'A'
+          AND CAST(NULLIF(tmi.semana, '') AS UNSIGNED) BETWEEN :s_ini AND :s_fin
+        GROUP BY TRIM(tmi.numeroinscripcion)
+    """), params).mappings().all()
+    return [dict(r) for r in rows]
 
-    mtd_huertos = session.execute(text("""
-        SELECT sv.numeroinscripcion,
-               COALESCE(SUM(IFNULL(i.hembras_silvestre,0) + IFNULL(i.machos_silvestre,0)), 0) AS moscas_fertiles,
-               COALESCE(SUM(tr.dias_exposicion), 0) AS total_dias
-        FROM sv01_sv02 sv
-        JOIN cat_rutas r           ON r.folio = sv.folio_ruta
-        JOIN trampas tp            ON TRIM(tp.numeroinscripcion) = TRIM(sv.numeroinscripcion)
-        JOIN trampas_revision tr   ON tr.no_trampa = tp.no_trampa
-        LEFT JOIN identificacion i ON i.no_trampa = tr.no_trampa AND i.no_semana = tr.no_semana
-        WHERE r.clave_pfa = :pfa
-          AND sv.status = 'A'
-          AND tr.no_semana BETWEEN :s_ini AND :s_fin
-          AND tr.status_revision IN :rev
-        GROUP BY sv.numeroinscripcion
-    """).bindparams(**{"rev": list(REV_STATUS_REVISADAS)}), params).mappings().all()
+
+# ──────────────────────────────────────────────────────────────────────
+# Builders por sección
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _compute_huertos(session: Session, params: dict, agregado: list[dict] | None = None) -> HuertosSeccion:
+    agregado = agregado if agregado is not None else _agregado_tmimf_o(session, params)
+    huertos = [r["ni"] for r in agregado]
+    if not huertos:
+        return HuertosSeccion(
+            huertos_atendidos=0, superficie_ha=0.0,
+            huertos_alta_prevalencia=0, huertos_baja_prevalencia=0, huertos_nula_prevalencia=0,
+        )
+
+    superficie_total = session.execute(text("""
+        SELECT COALESCE(SUM(sup), 0) AS total FROM (
+            SELECT TRIM(numeroinscripcion) AS ni, SUM(superficie) AS sup
+            FROM cat_superficie_registrada
+            GROUP BY TRIM(numeroinscripcion)
+        ) t
+        WHERE t.ni IN :ni_list
+    """).bindparams(**{"ni_list": huertos}), {}).scalar() or 0
 
     alta = baja = nula = 0
-    for row in mtd_huertos:
-        dias = float(row["total_dias"] or 0)
-        moscas = float(row["moscas_fertiles"] or 0)
-        mtd = (moscas / dias) if dias > 0 else 0.0
+    for r in agregado:
+        mtd_den = float(r["mtd_den"] or 0)
+        mtd_num = float(r["mtd_num"] or 0)
+        mtd = (mtd_num / mtd_den) if mtd_den > 0 else 0.0
         if mtd >= MTD_UMBRAL_ALTA:
             alta += 1
         elif mtd > MTD_UMBRAL_BAJA:
@@ -193,34 +242,42 @@ def _compute_huertos(session: Session, params: dict) -> HuertosSeccion:
             nula += 1
 
     return HuertosSeccion(
-        huertos_atendidos=int(totales["huertos"] or 0),
-        superficie_ha=round(float(totales["superficie_total"] or 0), 4),
+        huertos_atendidos=len(huertos),
+        superficie_ha=round(float(superficie_total), 2),
         huertos_alta_prevalencia=alta,
         huertos_baja_prevalencia=baja,
         huertos_nula_prevalencia=nula,
     )
 
 
-def _compute_trampeo(session: Session, params: dict) -> TrampeoSeccion:
+def _compute_trampeo(session: Session, params: dict, agregado: list[dict] | None = None) -> TrampeoSeccion:
+    agregado = agregado if agregado is not None else _agregado_tmimf_o(session, params)
     semanas = params["s_fin"] - params["s_ini"] + 1
 
-    instaladas = session.execute(text("""
-        SELECT COUNT(DISTINCT tp.no_trampa) AS total
-        FROM trampas tp
-        JOIN sv01_sv02 sv ON TRIM(sv.numeroinscripcion) = TRIM(tp.numeroinscripcion)
-        JOIN cat_rutas r  ON r.folio = sv.folio_ruta
-        WHERE r.clave_pfa = :pfa AND tp.status = 'A' AND sv.status = 'A'
-    """), params).mappings().first()
-    trampas_instaladas = int(instaladas["total"] or 0)
+    trampas_instaladas_acumulado = sum(int(r["trampas_instaladas"] or 0) for r in agregado)
+    trampas_revisadas = sum(int(r["trampas_revisadas"] or 0) for r in agregado)
+    dias_acumulados = sum(int(r["dias_exposicion_sum"] or 0) for r in agregado)
+    tmimfs_o = sum(int(r["tmimfs_o"] or 0) for r in agregado)
+    mtd_num = sum(float(r["mtd_num"] or 0) for r in agregado)
+    mtd_den = sum(float(r["mtd_den"] or 0) for r in agregado)
 
-    rev = session.execute(text("""
+    # Trampas instaladas total = promedio de trampas por TMIMF por # de huertos
+    # (cada TMIMF 'O' es un huerto × semana con sus trampas).
+    huertos_count = len(agregado)
+    trampas_instaladas_total = (
+        int(round(trampas_instaladas_acumulado / semanas)) if semanas > 0 and huertos_count > 0 else 0
+    )
+    trampas_x_semanas = trampas_instaladas_acumulado
+
+    pct = (trampas_revisadas * 100 / trampas_x_semanas) if trampas_x_semanas > 0 else 0.0
+    dias_promedio = (dias_acumulados / tmimfs_o) if tmimfs_o > 0 else 0.0
+    mtd_region = (mtd_num / mtd_den) if mtd_den > 0 else 0.0
+
+    # Fértiles / estériles siguen desde trampas_revision + identificacion
+    rev_flies = session.execute(text("""
         SELECT
-          COUNT(*)                                  AS revisadas,
-          COALESCE(SUM(tr.dias_exposicion), 0)      AS dias_total,
-          COALESCE(SUM(IFNULL(i.hembras_silvestre,0)+IFNULL(i.machos_silvestre,0)), 0) AS moscas_fertiles,
-          COALESCE(SUM(IFNULL(i.hembras_esteril,0)+IFNULL(i.machos_esteril,0)), 0)     AS moscas_esteriles,
-          COUNT(DISTINCT CASE WHEN IFNULL(i.hembras_silvestre,0)+IFNULL(i.machos_silvestre,0)>0 THEN tr.no_trampa END) AS trampas_c_fertil,
-          COUNT(DISTINCT CASE WHEN IFNULL(i.hembras_esteril,0)+IFNULL(i.machos_esteril,0)>0 THEN tr.no_trampa END)     AS trampas_c_esteril
+          COUNT(DISTINCT CASE WHEN IFNULL(i.hembras_silvestre,0)+IFNULL(i.machos_silvestre,0)>0 THEN tr.no_trampa END) AS fertil,
+          COUNT(DISTINCT CASE WHEN IFNULL(i.hembras_esteril,0)+IFNULL(i.machos_esteril,0)>0 THEN tr.no_trampa END)     AS esteril
         FROM trampas_revision tr
         JOIN trampas tp ON tp.no_trampa = tr.no_trampa
         JOIN sv01_sv02 sv ON TRIM(sv.numeroinscripcion) = TRIM(tp.numeroinscripcion)
@@ -231,90 +288,69 @@ def _compute_trampeo(session: Session, params: dict) -> TrampeoSeccion:
           AND tr.status_revision IN :rev
     """).bindparams(**{"rev": list(REV_STATUS_REVISADAS)}), params).mappings().first()
 
-    revisadas = int(rev["revisadas"] or 0)
-    dias_total = int(rev["dias_total"] or 0)
-    moscas_fertiles = int(rev["moscas_fertiles"] or 0)
-    denom = trampas_instaladas * semanas
-    pct = (revisadas * 100 / denom) if denom > 0 else 0.0
-    dias_promedio = (dias_total / revisadas) if revisadas > 0 else 0.0
-    mtd = (moscas_fertiles / dias_total) if dias_total > 0 else 0.0
-
     return TrampeoSeccion(
-        trampas_instaladas_total=trampas_instaladas,
+        trampas_instaladas_total=trampas_instaladas_total,
         semanas_en_rango=semanas,
-        trampas_instaladas_x_semanas=denom,
-        trampas_revisadas=revisadas,
+        trampas_instaladas_x_semanas=trampas_x_semanas,
+        trampas_revisadas=trampas_revisadas,
         porcentaje_revisadas=round(pct, 2),
-        trampas_con_mosca_fertil=int(rev["trampas_c_fertil"] or 0),
-        trampas_con_mosca_esteril=int(rev["trampas_c_esteril"] or 0),
+        trampas_con_mosca_fertil=int(rev_flies["fertil"] or 0),
+        trampas_con_mosca_esteril=int(rev_flies["esteril"] or 0),
         dias_exposicion_promedio=round(dias_promedio, 2),
-        mtd_region=round(mtd, 4),
+        mtd_region=round(mtd_region, 4),
     )
 
 
-def _compute_muestreo(session: Session, params: dict) -> MuestreoSeccion:
-    row = session.execute(text("""
-        SELECT
-          COUNT(DISTINCT m.no_muestra)                                                AS muestreos,
-          COUNT(DISTINCT CASE WHEN m.frutos_infestados > 0 THEN m.no_muestra END)     AS con_larva,
-          COALESCE(SUM(m.no_frutos), 0)                                               AS frutos,
-          COALESCE(SUM(m.frutos_infestados), 0)                                       AS infestados,
-          COALESCE(SUM(m.kgs_muestreados), 0)                                         AS kgs
-        FROM muestreo_de_frutos m
-        JOIN sv01_sv02 sv ON TRIM(sv.numeroinscripcion) = TRIM(m.numeroinscripcion)
-        JOIN cat_rutas r  ON r.folio = sv.folio_ruta
-        WHERE r.clave_pfa = :pfa
-          AND m.no_semana BETWEEN :s_ini AND :s_fin
-    """), params).mappings().first()
+def _compute_muestreo(session: Session, params: dict, agregado: list[dict] | None = None) -> MuestreoSeccion:
+    agregado = agregado if agregado is not None else _agregado_tmimf_o(session, params)
 
-    larvas = session.execute(text("""
-        SELECT COALESCE(SUM(il.no_larvas), 0) AS larvas
-        FROM identificacion_laboratorio il
-        JOIN muestreo_de_frutos m ON m.no_muestra = il.no_muestra
-        JOIN sv01_sv02 sv ON TRIM(sv.numeroinscripcion) = TRIM(m.numeroinscripcion)
-        JOIN cat_rutas r  ON r.folio = sv.folio_ruta
-        WHERE r.clave_pfa = :pfa
-          AND m.no_semana BETWEEN :s_ini AND :s_fin
-    """), params).mappings().first()
-
-    kgs = float(row["kgs"] or 0)
-    larvas_n = int(larvas["larvas"] or 0)
-    larvas_kg = (larvas_n / kgs) if kgs > 0 else 0.0
+    muestreos_tomados = sum(int(r["muestreos_tomados"] or 0) for r in agregado)
+    muestreos_con_larva = sum(int(r["muestreos_con_larva"] or 0) for r in agregado)
+    larvas_kg_sum = sum(float(r["larvas_kg_sum"] or 0) for r in agregado)
+    kg_muestreada = sum(float(r["kg_muestreada"] or 0) for r in agregado)
 
     return MuestreoSeccion(
-        muestreos_tomados=int(row["muestreos"] or 0),
-        muestreos_con_larva=int(row["con_larva"] or 0),
-        larvas_por_kg=round(larvas_kg, 4),
-        frutos_muestreados=int(row["frutos"] or 0),
-        frutos_infestados=int(row["infestados"] or 0),
+        muestreos_tomados=muestreos_tomados,
+        muestreos_con_larva=muestreos_con_larva,
+        larvas_por_kg=round(larvas_kg_sum, 2),
+        kg_fruta_muestreada=round(kg_muestreada, 2),
     )
 
 
-def _compute_control_quimico(session: Session, params: dict) -> ControlQuimicoSeccion:
-    row = session.execute(text("""
+def _compute_control_quimico(session: Session, params: dict, agregado: list[dict] | None = None) -> ControlQuimicoSeccion:
+    agregado = agregado if agregado is not None else _agregado_tmimf_o(session, params)
+
+    has = sum(float(r["has_asperjadas"] or 0) for r in agregado)
+    litros = sum(float(r["litros_asperjados"] or 0) for r in agregado)
+
+    # Estaciones cebo y #huertos con control siguen desde control_quimico
+    extra = session.execute(text("""
         SELECT
-          COALESCE(SUM(cq.superficie), 0)                                           AS has,
-          COALESCE(SUM(cq.proteina_lts + cq.malathion_lts + cq.agua_lts), 0)        AS litros,
-          COALESCE(SUM(cq.estaciones_cebo), 0)                                      AS cebo,
-          COUNT(DISTINCT cq.numeroinscripcion)                                      AS huertos
+          COALESCE(SUM(cq.estaciones_cebo), 0)   AS cebo,
+          COUNT(DISTINCT cq.numeroinscripcion)   AS huertos
         FROM control_quimico cq
         JOIN sv01_sv02 sv ON TRIM(sv.numeroinscripcion) = TRIM(cq.numeroinscripcion)
         JOIN cat_rutas r  ON r.folio = sv.folio_ruta
         WHERE r.clave_pfa = :pfa
           AND cq.no_semana BETWEEN :s_ini AND :s_fin
     """), params).mappings().first()
+
     return ControlQuimicoSeccion(
-        hectareas_asperjadas=round(float(row["has"] or 0), 4),
-        litros_asperjados=round(float(row["litros"] or 0), 2),
-        estaciones_cebo=int(row["cebo"] or 0),
-        huertos_con_control=int(row["huertos"] or 0),
+        hectareas_asperjadas=round(has, 2),
+        litros_asperjados=round(litros, 2),
+        estaciones_cebo=int(extra["cebo"] or 0),
+        huertos_con_control=int(extra["huertos"] or 0),
     )
 
 
-def _compute_control_cultural(session: Session, params: dict) -> ControlCulturalSeccion:
-    row = session.execute(text("""
+def _compute_control_cultural(session: Session, params: dict, agregado: list[dict] | None = None) -> ControlCulturalSeccion:
+    agregado = agregado if agregado is not None else _agregado_tmimf_o(session, params)
+
+    kgs = sum(float(r["kg_destruidos"] or 0) for r in agregado)
+
+    # Árboles y has rastreadas siguen desde control_mecanico_cultural
+    extra = session.execute(text("""
         SELECT
-          COALESCE(SUM(cmc.kgs_destruidos), 0) AS kgs,
           COALESCE(SUM(cmc.no_arboles), 0)     AS arboles,
           COALESCE(SUM(cmc.has_rastreadas), 0) AS has
         FROM control_mecanico_cultural cmc
@@ -323,10 +359,11 @@ def _compute_control_cultural(session: Session, params: dict) -> ControlCultural
         WHERE r.clave_pfa = :pfa
           AND cmc.no_semana BETWEEN :s_ini AND :s_fin
     """), params).mappings().first()
+
     return ControlCulturalSeccion(
-        kgs_destruidos=round(float(row["kgs"] or 0), 2),
-        arboles_eliminados=int(row["arboles"] or 0),
-        hectareas_rastreadas=round(float(row["has"] or 0), 4),
+        kgs_destruidos=round(kgs, 2),
+        arboles_eliminados=int(extra["arboles"] or 0),
+        hectareas_rastreadas=round(float(extra["has"] or 0), 2),
     )
 
 
@@ -345,7 +382,7 @@ def _compute_generalidades(session: Session, params: dict) -> GeneralidadesSecci
 
     ton = session.execute(text("""
         SELECT
-          COALESCE(SUM(det.cantidad_movilizada), 0)                                 AS ton_total,
+          COALESCE(SUM(det.cantidad_movilizada), 0) AS ton_total,
           COALESCE(SUM(CASE WHEN t.mercado_destino = 1 THEN det.cantidad_movilizada ELSE 0 END), 0) AS ton_exp,
           COALESCE(SUM(CASE WHEN t.mercado_destino > 1 THEN det.cantidad_movilizada ELSE 0 END), 0) AS ton_nal
         FROM tmimf t
@@ -359,16 +396,60 @@ def _compute_generalidades(session: Session, params: dict) -> GeneralidadesSecci
 
     return GeneralidadesSeccion(
         tmimf_emitidas=int(row["tmimf_total"] or 0),
-        toneladas_movilizadas=round(float(ton["ton_total"] or 0) / 1000, 3),
+        toneladas_movilizadas=round(float(ton["ton_total"] or 0) / 1000, 2),
         embarques_exportacion=int(row["tmimf_exp"] or 0),
         embarques_nacional=int(row["tmimf_nal"] or 0),
-        toneladas_exportacion=round(float(ton["ton_exp"] or 0) / 1000, 3),
-        toneladas_nacional=round(float(ton["ton_nal"] or 0) / 1000, 3),
+        toneladas_exportacion=round(float(ton["ton_exp"] or 0) / 1000, 2),
+        toneladas_nacional=round(float(ton["ton_nal"] or 0) / 1000, 2),
     )
 
 
+def _compute_hallazgos(session: Session, params: dict, limit: int | None = None) -> HallazgosSeccion:
+    """Revisiones de trampeo sin TMIMF 'O' asociada para ese huerto+semana."""
+    rows = session.execute(text("""
+        SELECT
+          TRIM(tp.numeroinscripcion) AS numeroinscripcion,
+          tr.no_trampa,
+          tr.no_semana,
+          tr.fecha_revision,
+          tr.status_revision
+        FROM trampas_revision tr
+        JOIN trampas tp ON tp.no_trampa = tr.no_trampa
+        JOIN sv01_sv02 sv ON TRIM(sv.numeroinscripcion) = TRIM(tp.numeroinscripcion)
+        JOIN cat_rutas r ON r.folio = sv.folio_ruta
+        WHERE r.clave_pfa = :pfa
+          AND tr.no_semana BETWEEN :s_ini AND :s_fin
+          AND tr.status_revision IN :rev
+          AND NOT EXISTS (
+              SELECT 1 FROM tmimf tmi
+              WHERE tmi.clave_aprobado = :pfa
+                AND tmi.tipo_tarjeta = 'O'
+                AND tmi.status = 'A'
+                AND TRIM(tmi.numeroinscripcion) = TRIM(tp.numeroinscripcion)
+                AND CAST(NULLIF(tmi.semana,'') AS UNSIGNED) = tr.no_semana
+          )
+        ORDER BY tr.no_semana ASC, TRIM(tp.numeroinscripcion) ASC, tr.no_trampa ASC
+    """).bindparams(**{"rev": list(REV_STATUS_REVISADAS)}), params).mappings().all()
+
+    total = len(rows)
+    if limit is not None:
+        rows = rows[:limit]
+
+    items = [
+        HallazgoTrampeo(
+            numeroinscripcion=str(r["numeroinscripcion"] or ""),
+            no_trampa=str(r["no_trampa"] or ""),
+            no_semana=int(r["no_semana"] or 0),
+            fecha_revision=(r["fecha_revision"].isoformat() if r["fecha_revision"] else None),
+            status_revision=int(r["status_revision"] or 0),
+        )
+        for r in rows
+    ]
+    return HallazgosSeccion(total=total, items=items)
+
+
 # ──────────────────────────────────────────────────────────────────────
-# HTTP endpoints (JSON por sección)
+# HTTP endpoints (JSON)
 # ──────────────────────────────────────────────────────────────────────
 
 
@@ -408,17 +489,33 @@ def generalidades(params: dict = Depends(_params), session: Session = Depends(ge
     return _compute_generalidades(session, params)
 
 
+@router.get("/hallazgos-trampeo", response_model=HallazgosSeccion)
+def hallazgos_trampeo(params: dict = Depends(_params), session: Session = Depends(get_legacy_db)) -> HallazgosSeccion:
+    _validar_pfa_y_rango(session, **params)
+    return _compute_hallazgos(session, params)
+
+
+@router.get("/tiene-actividad", response_model=dict)
+def tiene_actividad(params: dict = Depends(_params), session: Session = Depends(get_legacy_db)) -> dict:
+    _validar_pfa_y_rango(session, **params)
+    return {"tiene_actividad": _tiene_actividad(session, params)}
+
+
 # ──────────────────────────────────────────────────────────────────────
 # PDF endpoint
 # ──────────────────────────────────────────────────────────────────────
 
-# Paleta institucional SENASICA (verde forest)
-COLOR_PRIMARIO = colors.HexColor("#014421")   # verde SENASICA
-COLOR_ACENTO = colors.HexColor("#4A7C3A")     # verde medio (headers de tabla)
+# Paleta institucional SENASICA
+COLOR_PRIMARIO = colors.HexColor("#014421")
+COLOR_ACENTO = colors.HexColor("#4A7C3A")
 COLOR_TEXTO = colors.HexColor("#1F2937")
 COLOR_SECUNDARIO = colors.HexColor("#6B7280")
-COLOR_BANDA = colors.HexColor("#F0F5EB")      # verde muy claro (zebra)
-COLOR_HIGHLIGHT = colors.HexColor("#D9EBCB")  # verde claro para MTD resaltado
+COLOR_BANDA = colors.HexColor("#F0F5EB")
+COLOR_HIGHLIGHT = colors.HexColor("#D9EBCB")
+COLOR_WARN = colors.HexColor("#C84141")
+COLOR_WARN_BANDA = colors.HexColor("#FDECEC")
+
+PAGE_HALLAZGOS_MAX_FILAS = 38  # filas que caben en una página con la tipografía actual
 
 
 def _meses_es() -> list[str]:
@@ -435,39 +532,23 @@ def _fmt_fecha(d) -> str:
 
 def _pf_numero(n: float | int, decimals: int = 0) -> str:
     if isinstance(n, int) or decimals == 0:
-        return f"{int(n):,}".replace(",", ",")
+        return f"{int(n):,}"
     return f"{n:,.{decimals}f}"
 
 
-def _draw_page(canvas, doc, estado_label: str):
-    """Header/footer en cada página."""
+def _draw_page(canvas, doc):
     canvas.saveState()
-
-    # Franja superior verde (más delgada)
     canvas.setFillColor(COLOR_PRIMARIO)
     canvas.rect(0, letter[1] - 5 * mm, letter[0], 5 * mm, fill=1, stroke=0)
-
-    # Footer
     canvas.setFillColor(COLOR_SECUNDARIO)
     canvas.setFont("Helvetica", 7.5)
-    canvas.drawString(
-        1.5 * cm,
-        1.0 * cm,
-        f"SENASICA · Campaña Nacional contra Moscas de la Fruta · {estado_label}",
-    )
-    canvas.drawRightString(
-        letter[0] - 1.5 * cm,
-        1.0 * cm,
-        f"Página {doc.page}",
-    )
-
+    canvas.drawString(1.5 * cm, 1.0 * cm, "SENASICA · Campaña Nacional contra Moscas de la Fruta")
+    canvas.drawRightString(letter[0] - 1.5 * cm, 1.0 * cm, f"Página {doc.page}")
     canvas.restoreState()
 
 
-def _seccion_titulo(roman: str, titulo: str, styles) -> Table:
-    """Banda de sección, compacta."""
-    data = [[f"{roman}.  {titulo.upper()}"]]
-    t = Table(data, colWidths=[17.4 * cm])
+def _seccion_titulo(roman: str, titulo: str) -> Table:
+    t = Table([[f"{roman}.  {titulo.upper()}"]], colWidths=[17.4 * cm])
     t.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), COLOR_PRIMARIO),
         ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
@@ -482,10 +563,8 @@ def _seccion_titulo(roman: str, titulo: str, styles) -> Table:
 
 
 def _tabla_indicadores(rows: list[tuple[str, str, str]], mtd_highlight_index: int | None = None) -> Table:
-    """Tabla de 3 columnas compacta."""
     header = [("CONCEPTO", "UNIDAD DE MEDIDA", "CANTIDAD")]
     data = header + rows
-
     t = Table(data, colWidths=[10.2 * cm, 4.0 * cm, 3.2 * cm])
     style = TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), COLOR_ACENTO),
@@ -495,7 +574,6 @@ def _tabla_indicadores(rows: list[tuple[str, str, str]], mtd_highlight_index: in
         ("ALIGN", (0, 0), (0, 0), "LEFT"),
         ("ALIGN", (1, 0), (1, 0), "CENTER"),
         ("ALIGN", (2, 0), (2, 0), "RIGHT"),
-        # body
         ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
         ("FONTSIZE", (0, 1), (-1, -1), 8),
         ("TEXTCOLOR", (0, 1), (-1, -1), COLOR_TEXTO),
@@ -518,36 +596,131 @@ def _tabla_indicadores(rows: list[tuple[str, str, str]], mtd_highlight_index: in
     return t
 
 
-@router.get("/pdf")
-def informe_pdf(
-    params: dict = Depends(_params),
-    session: Session = Depends(get_legacy_db),
-) -> StreamingResponse:
-    pfa = _validar_pfa_y_rango(session, **params)
+_STATUS_REV_LABEL = {1: "Revisada", 2: "Con captura", 6: "Extemporánea"}
 
-    sem_ini = _get_semana_info(session, params["s_ini"])
-    sem_fin = _get_semana_info(session, params["s_fin"])
-    estado_label = ""  # no siempre tenemos el nombre del estado aquí; queda genérico
 
-    huertos = _compute_huertos(session, params)
-    trampeo = _compute_trampeo(session, params)
-    muestreo = _compute_muestreo(session, params)
-    quimico = _compute_control_quimico(session, params)
-    cultural = _compute_control_cultural(session, params)
-    generalidades = _compute_generalidades(session, params)
+def _tabla_hallazgos(items: list[HallazgoTrampeo]) -> Table:
+    header = [("SEMANA", "HUERTO (INSCRIPCIÓN)", "TRAMPA", "FECHA REVISIÓN", "ESTADO")]
+    data = header + [
+        (
+            str(h.no_semana),
+            h.numeroinscripcion,
+            h.no_trampa,
+            h.fecha_revision or "—",
+            _STATUS_REV_LABEL.get(h.status_revision, str(h.status_revision)),
+        )
+        for h in items
+    ]
+    t = Table(data, colWidths=[1.8 * cm, 5.6 * cm, 3.8 * cm, 3.2 * cm, 3.0 * cm])
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), COLOR_WARN),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 7.5),
+        ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 1), (-1, -1), 7.5),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (0, 0), (0, -1), "CENTER"),
+        ("ALIGN", (2, 0), (2, -1), "CENTER"),
+        ("ALIGN", (3, 0), (3, -1), "CENTER"),
+        ("ALIGN", (4, 0), (4, -1), "CENTER"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, COLOR_WARN_BANDA]),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#E5E7EB")),
+    ]))
+    return t
 
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=letter,
-        leftMargin=1.5 * cm,
-        rightMargin=1.5 * cm,
-        topMargin=1.5 * cm,
-        bottomMargin=1.5 * cm,
-        title="Informe General por PFA",
-        author="SIGMOD",
-    )
 
+def _build_firma(pfa: PfaInfo, styles) -> Table:
+    firma_data = [
+        ["_" * 42],
+        [Paragraph(pfa.nombre.upper(), styles["FirmaNombre"])],
+        [Paragraph(pfa.cargo.upper() if pfa.cargo else "PROFESIONAL FITOSANITARIO AUTORIZADO", styles["FirmaCargo"])],
+        [Paragraph(f"Cédula: {pfa.cedula}" if pfa.cedula else "", styles["FirmaCargo"])],
+    ]
+    firma = Table(firma_data, colWidths=[17.4 * cm])
+    firma.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+    return firma
+
+
+def _build_header_meta(pfa: PfaInfo, sem_ini: dict | None, sem_fin: dict | None, styles) -> list:
+    story = []
+
+    logo = None
+    if LOGO_PATH.exists():
+        logo = Image(str(LOGO_PATH), width=4 * cm, height=1.2 * cm, kind="proportional")
+
+    if logo:
+        title_cell = [
+            Paragraph("INFORME GENERAL DE ACTIVIDAD FITOSANITARIA", styles["TitPrincipal"]),
+            Paragraph("Servicio Nacional de Sanidad, Inocuidad y Calidad Agroalimentaria — SENASICA",
+                      styles["SubtPrincipal"]),
+        ]
+        header_row = Table([[logo, title_cell]], colWidths=[4.5 * cm, 12.9 * cm])
+        header_row.setStyle(TableStyle([
+            ("ALIGN", (0, 0), (0, 0), "LEFT"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ]))
+        story.append(header_row)
+    else:
+        story.append(Paragraph("INFORME GENERAL DE ACTIVIDAD FITOSANITARIA", styles["TitPrincipal"]))
+        story.append(Paragraph("Servicio Nacional de Sanidad, Inocuidad y Calidad Agroalimentaria — SENASICA",
+                               styles["SubtPrincipal"]))
+    story.append(Spacer(1, 6))
+
+    ahora = datetime.now()
+    periodo_label = "—"
+    if sem_ini and sem_fin:
+        if sem_ini["folio"] == sem_fin["folio"]:
+            periodo_label = (
+                f"Semana {int(sem_ini['no_semana']):02d} / {int(sem_ini['periodo'])} "
+                f"({_fmt_fecha(sem_ini['fecha_inicio'])} a {_fmt_fecha(sem_ini['fecha_final'])})"
+            )
+        else:
+            periodo_label = (
+                f"Semana {int(sem_ini['no_semana']):02d}/{int(sem_ini['periodo'])} → "
+                f"Semana {int(sem_fin['no_semana']):02d}/{int(sem_fin['periodo'])} "
+                f"({_fmt_fecha(sem_ini['fecha_inicio'])} a {_fmt_fecha(sem_fin['fecha_final'])})"
+            )
+
+    meta_data = [
+        [Paragraph("PROFESIONAL FITOSANITARIO AUTORIZADO", styles["MetaLabel"]),
+         Paragraph(pfa.nombre, styles["MetaValue"])],
+        [Paragraph("CÉDULA", styles["MetaLabel"]),
+         Paragraph(pfa.cedula or "—", styles["MetaValue"])],
+        [Paragraph("PERÍODO DEL INFORME", styles["MetaLabel"]),
+         Paragraph(periodo_label, styles["MetaValue"])],
+        [Paragraph("GENERADO", styles["MetaLabel"]),
+         Paragraph(ahora.strftime("%d/%m/%Y %H:%M"), styles["MetaValue"])],
+    ]
+    meta = Table(meta_data, colWidths=[5.5 * cm, 11.9 * cm])
+    meta.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.5, COLOR_SECUNDARIO),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#E5E7EB")),
+        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#F9FAFB")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ]))
+    story.append(meta)
+    story.append(Spacer(1, 6))
+    return story
+
+
+def _make_styles():
     styles = getSampleStyleSheet()
     styles.add(ParagraphStyle(
         "TitPrincipal", parent=styles["Title"],
@@ -577,122 +750,111 @@ def informe_pdf(
         fontName="Helvetica", fontSize=8, textColor=COLOR_SECUNDARIO,
         alignment=TA_CENTER, leading=10,
     ))
+    styles.add(ParagraphStyle(
+        "SinActividad", parent=styles["Normal"],
+        fontName="Helvetica", fontSize=11, textColor=COLOR_TEXTO,
+        alignment=TA_CENTER, leading=18, spaceBefore=40,
+    ))
+    styles.add(ParagraphStyle(
+        "HallazgoTitulo", parent=styles["Normal"],
+        fontName="Helvetica-Bold", fontSize=11, textColor=COLOR_WARN,
+        alignment=TA_CENTER, leading=14, spaceAfter=4,
+    ))
+    styles.add(ParagraphStyle(
+        "HallazgoSubt", parent=styles["Normal"],
+        fontName="Helvetica", fontSize=8.5, textColor=COLOR_SECUNDARIO,
+        alignment=TA_CENTER, leading=11, spaceAfter=6,
+    ))
+    return styles
 
-    # ── Header (logo + título) ─────────────────────────────
+
+@router.get("/pdf")
+def informe_pdf(
+    params: dict = Depends(_params),
+    session: Session = Depends(get_legacy_db),
+) -> StreamingResponse:
+    pfa = _validar_pfa_y_rango(session, **params)
+    sem_ini = _get_semana_info(session, params["s_ini"])
+    sem_fin = _get_semana_info(session, params["s_fin"])
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=letter,
+        leftMargin=1.5 * cm, rightMargin=1.5 * cm,
+        topMargin=1.5 * cm, bottomMargin=1.5 * cm,
+        title="Informe General por PFA", author="SIGMOD",
+    )
+    styles = _make_styles()
     story: list = []
 
-    logo = None
-    if LOGO_PATH.exists():
-        logo = Image(str(LOGO_PATH), width=4 * cm, height=1.2 * cm, kind="proportional")
+    # Header + meta (siempre)
+    story.extend(_build_header_meta(pfa, sem_ini, sem_fin, styles))
 
-    if logo:
-        title_cell = [
-            Paragraph("INFORME GENERAL DE ACTIVIDAD FITOSANITARIA", styles["TitPrincipal"]),
-            Paragraph("Servicio Nacional de Sanidad, Inocuidad y Calidad Agroalimentaria — SENASICA",
-                      styles["SubtPrincipal"]),
-        ]
-        header_row = Table(
-            [[logo, title_cell]],
-            colWidths=[4.5 * cm, 12.9 * cm],
-        )
-        header_row.setStyle(TableStyle([
-            ("ALIGN", (0, 0), (0, 0), "LEFT"),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 0),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-        ]))
-        story.append(header_row)
-    else:
-        story.append(Paragraph("INFORME GENERAL DE ACTIVIDAD FITOSANITARIA", styles["TitPrincipal"]))
+    # ── ¿Hay actividad? ─────────────────────────────────
+    if not _tiene_actividad(session, params):
+        story.append(Spacer(1, 20))
         story.append(Paragraph(
-            "Servicio Nacional de Sanidad, Inocuidad y Calidad Agroalimentaria — SENASICA",
-            styles["SubtPrincipal"],
+            "<b>Este PFA no tiene TMIMF emitida en el período seleccionado.</b><br/><br/>"
+            "Sin información disponible para generar el informe.",
+            styles["SinActividad"],
         ))
-    story.append(Spacer(1, 6))
+        story.append(Spacer(1, 60))
+        story.append(_build_firma(pfa, styles))
+        doc.build(story, onFirstPage=_draw_page, onLaterPages=_draw_page)
+        buffer.seek(0)
+        return _streaming(buffer, pfa, params, suffix="_sin_actividad")
 
-    # ── Meta block (PFA, período, generación) ─────────────
-    ahora = datetime.now()
-    periodo_label = ""
-    if sem_ini and sem_fin:
-        if sem_ini["folio"] == sem_fin["folio"]:
-            periodo_label = (
-                f"Semana {int(sem_ini['no_semana']):02d} / {int(sem_ini['periodo'])} "
-                f"({_fmt_fecha(sem_ini['fecha_inicio'])} a {_fmt_fecha(sem_ini['fecha_final'])})"
-            )
-        else:
-            periodo_label = (
-                f"Semana {int(sem_ini['no_semana']):02d}/{int(sem_ini['periodo'])} → "
-                f"Semana {int(sem_fin['no_semana']):02d}/{int(sem_fin['periodo'])} "
-                f"({_fmt_fecha(sem_ini['fecha_inicio'])} a {_fmt_fecha(sem_fin['fecha_final'])})"
-            )
+    # ── Computar todo ───────────────────────────────────
+    agregado = _agregado_tmimf_o(session, params)
+    huertos_data = _compute_huertos(session, params, agregado)
+    trampeo_data = _compute_trampeo(session, params, agregado)
+    muestreo_data = _compute_muestreo(session, params, agregado)
+    quimico = _compute_control_quimico(session, params, agregado)
+    cultural = _compute_control_cultural(session, params, agregado)
+    generalidades_data = _compute_generalidades(session, params)
+    hallazgos = _compute_hallazgos(session, params, limit=PAGE_HALLAZGOS_MAX_FILAS)
 
-    meta_data = [
-        [Paragraph("PROFESIONAL FITOSANITARIO AUTORIZADO", styles["MetaLabel"]),
-         Paragraph(pfa.nombre, styles["MetaValue"])],
-        [Paragraph("CÉDULA", styles["MetaLabel"]),
-         Paragraph(pfa.cedula or "—", styles["MetaValue"])],
-        [Paragraph("PERÍODO DEL INFORME", styles["MetaLabel"]),
-         Paragraph(periodo_label or "—", styles["MetaValue"])],
-        [Paragraph("GENERADO", styles["MetaLabel"]),
-         Paragraph(ahora.strftime("%d/%m/%Y %H:%M"), styles["MetaValue"])],
-    ]
-    meta = Table(meta_data, colWidths=[5.5 * cm, 11.9 * cm])
-    meta.setStyle(TableStyle([
-        ("BOX", (0, 0), (-1, -1), 0.5, COLOR_SECUNDARIO),
-        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#E5E7EB")),
-        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#F9FAFB")),
-        ("LEFTPADDING", (0, 0), (-1, -1), 6),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-        ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-    ]))
-    story.append(meta)
-    story.append(Spacer(1, 6))
+    SPACE = 4
 
-    SPACE = 4  # espacio entre secciones
-
-    # ── I. Huertos ─────────────────────────────────────────
-    story.append(_seccion_titulo("I", "Huertos atendidos", styles))
+    # ── I. Huertos ───────────────────────────────────────
+    story.append(_seccion_titulo("I", "Huertos atendidos"))
     story.append(_tabla_indicadores([
-        ("Huertos atendidos",                  "Huertos",   _pf_numero(huertos.huertos_atendidos)),
-        ("I.1  Superficie atendida",           "Hectáreas", _pf_numero(huertos.superficie_ha, 2)),
-        ("I.2  Huertos en alta prevalencia",   "Huertos",   _pf_numero(huertos.huertos_alta_prevalencia)),
-        ("I.3  Huertos en baja prevalencia",   "Huertos",   _pf_numero(huertos.huertos_baja_prevalencia)),
-        ("I.4  Huertos en nula prevalencia",   "Huertos",   _pf_numero(huertos.huertos_nula_prevalencia)),
+        ("Huertos atendidos",                  "Huertos",   _pf_numero(huertos_data.huertos_atendidos)),
+        ("I.1  Superficie atendida",           "Hectáreas", _pf_numero(huertos_data.superficie_ha, 2)),
+        ("I.2  Huertos en alta prevalencia",   "Huertos",   _pf_numero(huertos_data.huertos_alta_prevalencia)),
+        ("I.3  Huertos en baja prevalencia",   "Huertos",   _pf_numero(huertos_data.huertos_baja_prevalencia)),
+        ("I.4  Huertos en nula prevalencia",   "Huertos",   _pf_numero(huertos_data.huertos_nula_prevalencia)),
     ]))
     story.append(Spacer(1, SPACE))
 
-    # ── II. Trampeo ────────────────────────────────────────
-    story.append(_seccion_titulo("II", "Trampeo", styles))
+    # ── II. Trampeo ──────────────────────────────────────
+    story.append(_seccion_titulo("II", "Trampeo"))
     trampeo_rows = [
         ("II.1  Trampas instaladas",
          "Trampas",
-         f"{_pf_numero(trampeo.trampas_instaladas_total)} × {trampeo.semanas_en_rango} sem = {_pf_numero(trampeo.trampas_instaladas_x_semanas)}"),
-        ("II.2  Trampas revisadas",            "Trampas",    _pf_numero(trampeo.trampas_revisadas)),
-        ("II.3  Porcentaje de revisadas",      "%",          f"{trampeo.porcentaje_revisadas:.2f}%"),
-        ("II.4  Trampas con mosca fértil",     "Trampas",    _pf_numero(trampeo.trampas_con_mosca_fertil)),
-        ("II.5  Trampas con mosca estéril",    "Trampas",    _pf_numero(trampeo.trampas_con_mosca_esteril)),
-        ("II.6  Días de exposición (promedio)","Días",       f"{trampeo.dias_exposicion_promedio:.2f}"),
-        ("II.7  MTD región (NOM-023)",         "MTD",        f"{trampeo.mtd_region:.4f}"),
+         f"{_pf_numero(trampeo_data.trampas_instaladas_total)} × {trampeo_data.semanas_en_rango} sem = {_pf_numero(trampeo_data.trampas_instaladas_x_semanas)}"),
+        ("II.2  Trampas revisadas",            "Trampas",    _pf_numero(trampeo_data.trampas_revisadas)),
+        ("II.3  Porcentaje de revisadas",      "%",          f"{trampeo_data.porcentaje_revisadas:.2f}%"),
+        ("II.4  Trampas con mosca fértil",     "Trampas",    _pf_numero(trampeo_data.trampas_con_mosca_fertil)),
+        ("II.5  Trampas con mosca estéril",    "Trampas",    _pf_numero(trampeo_data.trampas_con_mosca_esteril)),
+        ("II.6  Días de exposición (promedio)","Días",       f"{trampeo_data.dias_exposicion_promedio:.2f}"),
+        ("II.7  MTD región (NOM-023)",         "MTD",        f"{trampeo_data.mtd_region:.4f}"),
     ]
     story.append(_tabla_indicadores(trampeo_rows, mtd_highlight_index=len(trampeo_rows) - 1))
     story.append(Spacer(1, SPACE))
 
-    # ── III. Muestreo ──────────────────────────────────────
-    story.append(_seccion_titulo("III", "Muestreo de frutos", styles))
+    # ── III. Muestreo ────────────────────────────────────
+    story.append(_seccion_titulo("III", "Muestreo de frutos"))
     story.append(_tabla_indicadores([
-        ("III.1  Muestreos tomados",      "Muestreos", _pf_numero(muestreo.muestreos_tomados)),
-        ("III.2  Muestreos con larva",    "Muestreos", _pf_numero(muestreo.muestreos_con_larva)),
-        ("III.3  Larvas / kilogramo",     "L / KG",    f"{muestreo.larvas_por_kg:.2f}"),
-        ("III.4  Frutos muestreados",     "Frutos",    _pf_numero(muestreo.frutos_muestreados)),
-        ("III.5  Frutos infestados",      "Frutos",    _pf_numero(muestreo.frutos_infestados)),
+        ("III.1  Muestreos tomados",           "Muestreos", _pf_numero(muestreo_data.muestreos_tomados)),
+        ("III.2  Muestreos con larva",         "Muestreos", _pf_numero(muestreo_data.muestreos_con_larva)),
+        ("III.3  Larvas / kilogramo (suma)",   "L / KG",    f"{muestreo_data.larvas_por_kg:.2f}"),
+        ("III.4  Kg fruta muestreada",         "Kg",        f"{muestreo_data.kg_fruta_muestreada:.2f}"),
     ]))
     story.append(Spacer(1, SPACE))
 
-    # ── IV. Control químico ────────────────────────────────
-    story.append(_seccion_titulo("IV", "Control químico", styles))
+    # ── IV. Control químico ──────────────────────────────
+    story.append(_seccion_titulo("IV", "Control químico"))
     story.append(_tabla_indicadores([
         ("IV.1  Hectáreas asperjadas",    "Hectáreas",  _pf_numero(quimico.hectareas_asperjadas, 2)),
         ("IV.2  Litros asperjados",       "Litros",     f"{quimico.litros_asperjados:.2f}"),
@@ -701,8 +863,8 @@ def informe_pdf(
     ]))
     story.append(Spacer(1, SPACE))
 
-    # ── V. Control mecánico-cultural ──────────────────────
-    story.append(_seccion_titulo("V", "Control mecánico-cultural", styles))
+    # ── V. Control mecánico-cultural ────────────────────
+    story.append(_seccion_titulo("V", "Control mecánico-cultural"))
     story.append(_tabla_indicadores([
         ("V.1  Kgs de frutos destruidos", "Kg",         f"{cultural.kgs_destruidos:.2f}"),
         ("V.2  Árboles eliminados",       "Árboles",    _pf_numero(cultural.arboles_eliminados)),
@@ -710,40 +872,42 @@ def informe_pdf(
     ]))
     story.append(Spacer(1, SPACE))
 
-    # ── VI. Generalidades ─────────────────────────────────
-    story.append(_seccion_titulo("VI", "Generalidades (TMIMF)", styles))
+    # ── VI. Generalidades ───────────────────────────────
+    story.append(_seccion_titulo("VI", "Generalidades (TMIMF)"))
     story.append(_tabla_indicadores([
-        ("VI.1  TMIMF emitidas",                        "Emitidas",  _pf_numero(generalidades.tmimf_emitidas)),
-        ("VI.2  Toneladas movilizadas",                 "Toneladas", f"{generalidades.toneladas_movilizadas:,.2f}"),
-        ("VI.3  Embarques para exportación",            "Embarques", _pf_numero(generalidades.embarques_exportacion)),
-        ("VI.4  Embarques para mercado nacional",       "Embarques", _pf_numero(generalidades.embarques_nacional)),
-        ("VI.5  Toneladas exportación",                 "Toneladas", f"{generalidades.toneladas_exportacion:,.2f}"),
-        ("VI.6  Toneladas nacional",                    "Toneladas", f"{generalidades.toneladas_nacional:,.2f}"),
+        ("VI.1  TMIMF emitidas",                        "Emitidas",  _pf_numero(generalidades_data.tmimf_emitidas)),
+        ("VI.2  Toneladas movilizadas",                 "Toneladas", f"{generalidades_data.toneladas_movilizadas:,.2f}"),
+        ("VI.3  Embarques para exportación",            "Embarques", _pf_numero(generalidades_data.embarques_exportacion)),
+        ("VI.4  Embarques para mercado nacional",       "Embarques", _pf_numero(generalidades_data.embarques_nacional)),
+        ("VI.5  Toneladas exportación",                 "Toneladas", f"{generalidades_data.toneladas_exportacion:,.2f}"),
+        ("VI.6  Toneladas nacional",                    "Toneladas", f"{generalidades_data.toneladas_nacional:,.2f}"),
     ]))
 
-    # ── Firma ─────────────────────────────────────────────
+    # ── Firma (al final de la pág. 2) ───────────────────
     story.append(Spacer(1, 22))
-    firma_data = [
-        ["_" * 42],
-        [Paragraph(pfa.nombre.upper(), styles["FirmaNombre"])],
-        [Paragraph(pfa.cargo.upper() if pfa.cargo else "PROFESIONAL FITOSANITARIO AUTORIZADO", styles["FirmaCargo"])],
-        [Paragraph(f"Cédula: {pfa.cedula}" if pfa.cedula else "", styles["FirmaCargo"])],
-    ]
-    firma = Table(firma_data, colWidths=[17.4 * cm])
-    firma.setStyle(TableStyle([
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING", (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-    ]))
-    story.append(firma)
+    story.append(_build_firma(pfa, styles))
 
-    # Build
-    on_page = lambda c, d: _draw_page(c, d, estado_label)
-    doc.build(story, onFirstPage=on_page, onLaterPages=on_page)
+    # ── Página 3 (opcional): Hallazgos ──────────────────
+    if hallazgos.total > 0:
+        story.append(PageBreak())
+        story.append(Paragraph("HALLAZGOS DE TRAMPEO SIN TMIMF ASOCIADA", styles["HallazgoTitulo"]))
+        hay_mas = hallazgos.total - len(hallazgos.items)
+        subt = (
+            f"Se detectaron {hallazgos.total} revisiones de trampeo "
+            f"sin TMIMF tipo 'O' correspondiente para el huerto y semana."
+        )
+        if hay_mas > 0:
+            subt += f" Se muestran las primeras {len(hallazgos.items)}; hay {hay_mas} registro(s) adicional(es) no listado(s)."
+        story.append(Paragraph(subt, styles["HallazgoSubt"]))
+        story.append(_tabla_hallazgos(hallazgos.items))
 
+    doc.build(story, onFirstPage=_draw_page, onLaterPages=_draw_page)
     buffer.seek(0)
-    filename = f"informe-general-pfa_{pfa.folio}_{params['s_ini']}-{params['s_fin']}.pdf"
+    return _streaming(buffer, pfa, params)
+
+
+def _streaming(buffer: BytesIO, pfa: PfaInfo, params: dict, suffix: str = "") -> StreamingResponse:
+    filename = f"informe-general-pfa_{pfa.folio}_{params['s_ini']}-{params['s_fin']}{suffix}.pdf"
     return StreamingResponse(
         buffer,
         media_type="application/pdf",
