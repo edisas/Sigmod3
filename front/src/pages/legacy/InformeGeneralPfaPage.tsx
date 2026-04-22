@@ -77,6 +77,7 @@ export default function InformeGeneralPfaPage() {
   const [seccionGeneralidades, setSeccionGeneralidades] = useState<Generalidades | null>(null);
 
   const [contexto, setContexto] = useState<{ pfa: PfaOption; sIni: SemanaOption; sFin: SemanaOption } | null>(null);
+  const [descargandoPdf, setDescargandoPdf] = useState(false);
 
   // Carga inicial de catálogos
   useEffect(() => {
@@ -173,6 +174,34 @@ export default function InformeGeneralPfaPage() {
     ]);
 
     setGenerando(false);
+  };
+
+  const handleDescargarPdf = async () => {
+    if (!token || !contexto) return;
+    setDescargandoPdf(true);
+    try {
+      const qs = `pfa_folio=${contexto.pfa.folio}&semana_inicio=${contexto.sIni.folio}&semana_fin=${contexto.sFin.folio}`;
+      const res = await fetch(`${API_BASE}/legacy/reportes/informe-general/pdf?${qs}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({} as { detail?: string }));
+        throw new Error(body.detail ?? `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `informe-general-pfa_${contexto.pfa.folio}_sem${contexto.sIni.no_semana}-${contexto.sFin.no_semana}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al descargar PDF');
+    } finally {
+      setDescargandoPdf(false);
+    }
   };
 
   const phasesDone = Object.values(phaseStatus).filter((s) => s === 'done').length;
@@ -326,6 +355,8 @@ export default function InformeGeneralPfaPage() {
           quimico={seccionQuimico}
           cultural={seccionCultural}
           generalidades={seccionGeneralidades}
+          onDescargarPdf={handleDescargarPdf}
+          descargandoPdf={descargandoPdf}
         />
       )}
     </div>
@@ -342,18 +373,40 @@ interface ResultadoProps {
   quimico: ControlQuimico | null;
   cultural: ControlCultural | null;
   generalidades: Generalidades | null;
+  onDescargarPdf: () => void;
+  descargandoPdf: boolean;
 }
 
-function InformeResultado({ contexto, huertos, trampeo, muestreo, quimico, cultural, generalidades }: ResultadoProps) {
+function InformeResultado({ contexto, huertos, trampeo, muestreo, quimico, cultural, generalidades, onDescargarPdf, descargandoPdf }: ResultadoProps) {
   return (
     <>
-      <section className="rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/10 p-4 sm:p-5">
-        <p className="text-xs uppercase tracking-wider text-amber-800 dark:text-amber-300 font-semibold mb-1">PFA evaluado</p>
-        <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{contexto.pfa.nombre}</p>
-        {contexto.pfa.cedula && <p className="text-xs font-mono text-slate-500 dark:text-slate-400">{contexto.pfa.cedula}</p>}
-        <p className="text-sm text-slate-700 dark:text-slate-300 mt-2">
-          Rango: <strong>{contexto.sIni.label}</strong> → <strong>{contexto.sFin.label}</strong>
-        </p>
+      <section className="rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/10 p-4 sm:p-5 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <p className="text-xs uppercase tracking-wider text-amber-800 dark:text-amber-300 font-semibold mb-1">PFA evaluado</p>
+          <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{contexto.pfa.nombre}</p>
+          {contexto.pfa.cedula && <p className="text-xs font-mono text-slate-500 dark:text-slate-400">{contexto.pfa.cedula}</p>}
+          <p className="text-sm text-slate-700 dark:text-slate-300 mt-2">
+            Rango: <strong>{contexto.sIni.label}</strong> → <strong>{contexto.sFin.label}</strong>
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onDescargarPdf}
+          disabled={descargandoPdf}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold whitespace-nowrap"
+        >
+          {descargandoPdf ? (
+            <>
+              <span className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              Generando PDF...
+            </>
+          ) : (
+            <>
+              <Icon name="picture_as_pdf" className="text-base" />
+              Descargar PDF
+            </>
+          )}
+        </button>
       </section>
 
       {/* I */}
