@@ -32,6 +32,14 @@ const navTree: NavNode[] = [
     ],
   },
   {
+    id: 'correcciones',
+    icon: 'build',
+    label: 'Correcciones',
+    children: [
+      { to: '/legacy/correcciones/revisiones-trampas', icon: 'track_changes', label: 'Revisiones de trampas' },
+    ],
+  },
+  {
     id: 'reportes',
     icon: 'summarize',
     label: 'Reportes',
