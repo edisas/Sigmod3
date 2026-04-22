@@ -537,7 +537,7 @@ function InformeResultado({
       </section>
 
       {/* I */}
-      <Card roman="I" titulo="Huertos atendidos" icon="forest" status={phaseStatus['huertos']}>
+      <Card roman="I" titulo="Huertos atendidos" icon="forest" status={phaseStatus['huertos']} semanaIni={contexto.sIni.no_semana} semanaFin={contexto.sFin.no_semana}>
         <Fila c="Huertos atendidos"          u="Huertos"    v={fInt(huertos?.huertos_atendidos)} />
         <Fila c="I.1 Superficie atendida"    u="Hectáreas"  v={fDec(huertos?.superficie_ha)} />
         <Fila c="I.2 Huertos en alta prevalencia"  u="Huertos" v={fInt(huertos?.huertos_alta_prevalencia)} />
@@ -546,7 +546,7 @@ function InformeResultado({
       </Card>
 
       {/* II */}
-      <Card roman="II" titulo="Trampeo" icon="track_changes" status={phaseStatus['trampeo']}>
+      <Card roman="II" titulo="Trampeo" icon="track_changes" status={phaseStatus['trampeo']} semanaIni={contexto.sIni.no_semana} semanaFin={contexto.sFin.no_semana}>
         <Fila c="II.1 Trampas instaladas"        u="Trampas"  v={`${fInt(trampeo?.trampas_instaladas_total)} × ${trampeo?.semanas_en_rango ?? 0} sem = ${fInt(trampeo?.trampas_instaladas_x_semanas)}`} />
         <Fila c="II.2 Trampas revisadas"         u="Trampas"  v={fInt(trampeo?.trampas_revisadas)} />
         <Fila c="II.3 Porcentaje de revisadas"   u="%"        v={fPct(trampeo?.porcentaje_revisadas)} />
@@ -557,7 +557,7 @@ function InformeResultado({
       </Card>
 
       {/* III */}
-      <Card roman="III" titulo="Muestreo de frutos" icon="science" status={phaseStatus['muestreo']}>
+      <Card roman="III" titulo="Muestreo de frutos" icon="science" status={phaseStatus['muestreo']} semanaIni={contexto.sIni.no_semana} semanaFin={contexto.sFin.no_semana}>
         <Fila c="III.1 Muestreos tomados"         u="Muestreos" v={fInt(muestreo?.muestreos_tomados)} />
         <Fila c="III.2 Muestreos con larva"       u="Muestreos" v={fInt(muestreo?.muestreos_con_larva)} />
         <Fila c="III.3 Larvas / kilogramo (suma)" u="L/KG"      v={fDec(muestreo?.larvas_por_kg, 2)} />
@@ -565,7 +565,7 @@ function InformeResultado({
       </Card>
 
       {/* IV */}
-      <Card roman="IV" titulo="Control químico" icon="sanitizer" status={phaseStatus['control-quimico']}>
+      <Card roman="IV" titulo="Control químico" icon="sanitizer" status={phaseStatus['control-quimico']} semanaIni={contexto.sIni.no_semana} semanaFin={contexto.sFin.no_semana}>
         <Fila c="IV.1 Hectáreas asperjadas"  u="Hectáreas"  v={fDec(quimico?.hectareas_asperjadas)} />
         <Fila c="IV.2 Litros asperjados"     u="Litros"     v={(quimico?.litros_asperjados ?? 0).toFixed(2)} />
         <Fila c="IV.3 Estaciones cebo"       u="Estaciones" v={fInt(quimico?.estaciones_cebo)} />
@@ -573,14 +573,14 @@ function InformeResultado({
       </Card>
 
       {/* V */}
-      <Card roman="V" titulo="Control mecánico-cultural" icon="agriculture" status={phaseStatus['control-cultural']}>
+      <Card roman="V" titulo="Control mecánico-cultural" icon="agriculture" status={phaseStatus['control-cultural']} semanaIni={contexto.sIni.no_semana} semanaFin={contexto.sFin.no_semana}>
         <Fila c="V.1 Kgs de frutos destruidos" u="Kg"         v={(cultural?.kgs_destruidos ?? 0).toFixed(2)} />
         <Fila c="V.2 Árboles eliminados"       u="Árboles"    v={fInt(cultural?.arboles_eliminados)} />
         <Fila c="V.3 Hectáreas rastreadas"     u="Hectáreas"  v={fDec(cultural?.hectareas_rastreadas)} />
       </Card>
 
       {/* VI */}
-      <Card roman="VI" titulo="Generalidades (TMIMF)" icon="local_shipping" status={phaseStatus['generalidades']}>
+      <Card roman="VI" titulo="Generalidades (TMIMF)" icon="local_shipping" status={phaseStatus['generalidades']} semanaIni={contexto.sIni.no_semana} semanaFin={contexto.sFin.no_semana}>
         <Fila c="VI.1 TMIMF emitidas"                  u="Emitidas"   v={fInt(generalidades?.tmimf_emitidas)} />
         <Fila c="VI.2 Toneladas movilizadas"            u="Toneladas"  v={fTon(generalidades?.toneladas_movilizadas)} />
         <Fila c="VI.3 Embarques para exportación"       u="Embarques"  v={fInt(generalidades?.embarques_exportacion)} />
@@ -592,7 +592,7 @@ function InformeResultado({
   );
 }
 
-function Card({ roman, titulo, icon, status, children }: { roman: string; titulo: string; icon: string; status: PhaseStatus; children: React.ReactNode }) {
+function Card({ roman, titulo, icon, status, semanaIni, semanaFin, children }: { roman: string; titulo: string; icon: string; status: PhaseStatus; semanaIni: number; semanaFin: number; children: React.ReactNode }) {
   const loading = status === 'loading' || status === 'pending';
   const error = status === 'error';
   const headerIconBg =
@@ -621,6 +621,7 @@ function Card({ roman, titulo, icon, status, children }: { roman: string; titulo
           <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 uppercase tracking-wide flex-1">
             <span className={`mr-2 ${error ? 'text-rose-700 dark:text-rose-400' : 'text-amber-700 dark:text-amber-400'}`}>{roman}.</span>{titulo}
           </h2>
+          {loading && <SemanaTicker semanaIni={semanaIni} semanaFin={semanaFin} />}
           {!loading && !error && (
             <Icon name="check_circle" className="text-emerald-500 text-base" />
           )}
@@ -630,6 +631,29 @@ function Card({ roman, titulo, icon, status, children }: { roman: string; titulo
         </table>
       </section>
     </CardStatusContext.Provider>
+  );
+}
+
+// Ticker visual: recorre el rango de semanas mientras la fase está en curso.
+// El SQL procesa el rango completo en una sola query — este contador es una
+// pista de avance basada en tiempo, no una señal literal del servidor. Al
+// llegar a la semana final se queda ahí hasta que la fase resuelve.
+function SemanaTicker({ semanaIni, semanaFin }: { semanaIni: number; semanaFin: number }) {
+  const [current, setCurrent] = useState(semanaIni);
+  useEffect(() => {
+    setCurrent(semanaIni);
+    if (semanaFin <= semanaIni) return;
+    const id = setInterval(() => {
+      setCurrent((prev) => (prev >= semanaFin ? semanaFin : prev + 1));
+    }, 700);
+    return () => clearInterval(id);
+  }, [semanaIni, semanaFin]);
+  return (
+    <span className="text-[10px] font-normal normal-case tracking-normal text-slate-500 dark:text-slate-400 whitespace-nowrap">
+      Analizando semana{' '}
+      <span className="tabular-nums font-semibold text-slate-700 dark:text-slate-300">{current}</span>
+      <span className="text-slate-400 dark:text-slate-500"> / {semanaFin}</span>
+    </span>
   );
 }
 
