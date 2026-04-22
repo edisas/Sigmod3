@@ -1,18 +1,73 @@
+import { useEffect, useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import Icon from '@/components/ui/Icon';
 import { useLegacyAuth } from '@/context/LegacyAuthContext';
 import { useTheme } from '@/context/ThemeContext';
+
+interface NavLeaf {
+  to: string;
+  icon: string;
+  label: string;
+}
+
+interface NavGroup {
+  id: string;
+  icon: string;
+  label: string;
+  children: NavLeaf[];
+}
+
+type NavNode = NavLeaf | NavGroup;
+
+const isGroup = (node: NavNode): node is NavGroup => 'children' in node;
+
+const navTree: NavNode[] = [
+  { to: '/legacy', icon: 'dashboard', label: 'Dashboard' },
+  {
+    id: 'reportes',
+    icon: 'summarize',
+    label: 'Reportes',
+    children: [
+      { to: '/legacy/reportes/concentrado-en-linea', icon: 'insights', label: 'Movilización en línea' },
+      { to: '/legacy/reportes/concentrado-en-linea-semanal', icon: 'date_range', label: 'Movilización semanal' },
+    ],
+  },
+];
 
 export default function LegacyLayout() {
   const { user, logout } = useLegacyAuth();
   const { isDark, toggle } = useTheme();
   const location = useLocation();
 
-  const navItems = [
-    { to: '/legacy', icon: 'dashboard', label: 'Dashboard' },
-    { to: '/legacy/reportes/concentrado-en-linea', icon: 'summarize', label: 'Movilización en línea' },
-    { to: '/legacy/reportes/concentrado-en-linea-semanal', icon: 'date_range', label: 'Movilización semanal' },
-  ];
+  const initialOpen = () => {
+    const open: Record<string, boolean> = {};
+    for (const node of navTree) {
+      if (isGroup(node) && node.children.some((c) => location.pathname === c.to)) {
+        open[node.id] = true;
+      }
+    }
+    return open;
+  };
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(initialOpen);
+
+  useEffect(() => {
+    setOpenGroups((prev) => {
+      const next = { ...prev };
+      for (const node of navTree) {
+        if (isGroup(node) && node.children.some((c) => location.pathname === c.to)) {
+          next[node.id] = true;
+        }
+      }
+      return next;
+    });
+  }, [location.pathname]);
+
+  const leafClasses = (path: string, indent: boolean) => `
+    flex items-center gap-3 ${indent ? 'pl-9' : 'px-3'} pr-3 py-2 border-l-2 transition-colors rounded-r
+    ${location.pathname === path
+      ? 'border-amber-400 text-amber-200 bg-white/5'
+      : 'border-transparent text-amber-100/80 hover:text-white hover:border-white/40'}
+  `;
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -36,21 +91,51 @@ export default function LegacyLayout() {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4 px-4 space-y-0.5 custom-scrollbar">
-          {navItems.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={`
-                flex items-center gap-3 px-3 py-2 border-l-2 transition-colors rounded-r
-                ${location.pathname === item.to
-                  ? 'border-amber-400 text-amber-200 bg-white/5'
-                  : 'border-transparent text-amber-100/80 hover:text-white hover:border-white/40'}
-              `}
-            >
-              <Icon name={item.icon} className="text-[20px]" />
-              <span className="font-medium">{item.label}</span>
-            </Link>
-          ))}
+          {navTree.map((node) => {
+            if (!isGroup(node)) {
+              return (
+                <Link key={node.to} to={node.to} className={leafClasses(node.to, false)}>
+                  <Icon name={node.icon} className="text-[20px]" />
+                  <span className="font-medium">{node.label}</span>
+                </Link>
+              );
+            }
+            const expanded = openGroups[node.id] ?? false;
+            const someActive = node.children.some((c) => location.pathname === c.to);
+            return (
+              <div key={node.id}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOpenGroups((prev) => ({ ...prev, [node.id]: !prev[node.id] }))
+                  }
+                  className={`
+                    w-full flex items-center justify-between gap-3 px-3 py-2 border-l-2 transition-colors rounded-r
+                    ${someActive
+                      ? 'border-amber-400 text-amber-200'
+                      : 'border-transparent text-amber-100/80 hover:text-white hover:border-white/40'}
+                  `}
+                  aria-expanded={expanded}
+                >
+                  <span className="flex items-center gap-3">
+                    <Icon name={node.icon} className="text-[20px]" />
+                    <span className="font-medium">{node.label}</span>
+                  </span>
+                  <Icon name={expanded ? 'expand_less' : 'expand_more'} className="text-base" />
+                </button>
+                {expanded && (
+                  <div className="mt-0.5 space-y-0.5">
+                    {node.children.map((leaf) => (
+                      <Link key={leaf.to} to={leaf.to} className={leafClasses(leaf.to, true)}>
+                        <Icon name={leaf.icon} className="text-[18px]" />
+                        <span className="text-sm font-medium">{leaf.label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         <div className="p-4 border-t border-white/10">
