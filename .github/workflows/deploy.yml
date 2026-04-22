@@ -94,7 +94,7 @@ jobs:
             -e "ssh -p ${{ secrets.DEPLOY_SSH_PORT || '22' }}" \
             front/dist/ ${{ secrets.DEPLOY_SSH_USER }}@${{ secrets.DEPLOY_SSH_HOST }}:${{ env.FRONT_REMOTE_PATH }}/
 
-      # ── Post-deploy backend (pip + migrate + restart) ────────
+      # ── Post-deploy backend (pip + migrate + restart systemd) ───
       - name: Backend — pip install, migraciones, restart
         run: |
           ssh -p ${{ secrets.DEPLOY_SSH_PORT || '22' }} \
@@ -105,13 +105,12 @@ jobs:
                 .venv/bin/pip install --upgrade pip
                 .venv/bin/pip install -r requirements.txt
                 .venv/bin/python migrate.py apply
-                mkdir -p tmp \
-                  storage/solicitudes_generadas \
+                mkdir -p storage/solicitudes_generadas \
                   storage/solicitudes_firmadas \
                   storage/figura_cooperadora_autorizaciones \
                   storage/figura_cooperadora_revocaciones \
                   storage/system
-                touch tmp/restart.txt
+                sudo /bin/systemctl restart sigmod-api3
               "'
 
       # ── Restore ownership (solo si tomamos ownership antes) ──
