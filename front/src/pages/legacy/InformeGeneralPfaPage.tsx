@@ -108,7 +108,7 @@ export default function InformeGeneralPfaPage() {
           setSemanas(list);
           if (list.length > 0) {
             setSemFin(list[0].folio);
-            setSemIni(list[Math.min(4, list.length - 1)].folio);
+            setSemIni(list[Math.min(MAX_SEMANAS_RANGO - 1, list.length - 1)].folio);
           }
         }
       } finally {
@@ -147,8 +147,9 @@ export default function InformeGeneralPfaPage() {
     return fin.folio - ini.folio + 1;
   })();
 
-  const rangoExcedido = semanasEnRango > MAX_SEMANAS_RANGO;
-  const rangoInvalido = semanasEnRango <= 0;
+  const seleccionCompleta = semIni !== null && semFin !== null;
+  const rangoExcedido = seleccionCompleta && semanasEnRango > MAX_SEMANAS_RANGO;
+  const rangoInvalido = seleccionCompleta && semanasEnRango <= 0;
 
   const handleGenerar = async () => {
     if (!token || pfaFolio === null || semIni === null || semFin === null) return;
@@ -384,7 +385,7 @@ export default function InformeGeneralPfaPage() {
             </span> · máximo {MAX_SEMANAS_RANGO}
           </span>
         </div>
-        {(rangoExcedido || rangoInvalido || rangoError) && (
+        {!loadingCatalogs && (rangoExcedido || rangoInvalido || rangoError) && (
           <div className="mt-3 p-2.5 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 flex items-center gap-2">
             <Icon name="error" className="text-rose-500 text-base shrink-0" />
             {rangoError || (rangoExcedido
