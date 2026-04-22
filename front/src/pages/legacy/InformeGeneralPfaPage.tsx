@@ -628,9 +628,9 @@ function Card({ roman, titulo, icon, status, semanaIni, semanaFin, children }: {
         </header>
         <table className="w-full text-sm table-fixed">
           <colgroup>
-            <col />
-            <col style={{ width: '10rem' }} />
-            <col style={{ width: '12rem' }} />
+            <col style={{ width: '50%' }} />
+            <col style={{ width: '30%' }} />
+            <col style={{ width: '20%' }} />
           </colgroup>
           <tbody>{children}</tbody>
         </table>
