@@ -87,6 +87,7 @@ export default function InformeGeneralPfaPage() {
   const [duracionReporteMs, setDuracionReporteMs] = useState<number | null>(null);
   const [pdfRestanteMs, setPdfRestanteMs] = useState<number | null>(null);
   const pdfIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const generationIdRef = useRef(0);
 
   // Carga inicial de catálogos
   useEffect(() => {
@@ -173,6 +174,7 @@ export default function InformeGeneralPfaPage() {
 
     const qs = `pfa_folio=${pfaFolio}&semana_inicio=${semIni}&semana_fin=${semFin}`;
     const t0 = performance.now();
+    const myGenId = ++generationIdRef.current;
 
     try {
       // Gate: ¿tiene actividad?
@@ -215,6 +217,18 @@ export default function InformeGeneralPfaPage() {
         }
       };
 
+      // Hallazgos se dispara en paralelo pero NO bloquea el render del resultado:
+      // cuando resuelva se inyecta la sección. Guardamos la generación para descartar
+      // respuestas obsoletas si el usuario vuelve a generar con otros parámetros.
+      fetch(`${API_BASE}/legacy/reportes/informe-general/hallazgos-trampeo?${qs}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data: Hallazgos | null) => {
+          if (data && generationIdRef.current === myGenId) setHallazgos(data);
+        })
+        .catch(() => { /* silencioso */ });
+
       await Promise.all([
         fetchPhase<Huertos>('huertos', 'huertos', setSeccionHuertos),
         fetchPhase<Trampeo>('trampeo', 'trampeo', setSeccionTrampeo),
@@ -223,16 +237,6 @@ export default function InformeGeneralPfaPage() {
         fetchPhase<ControlCultural>('control-cultural', 'control-cultural', setSeccionCultural),
         fetchPhase<Generalidades>('generalidades', 'generalidades', setSeccionGeneralidades),
       ]);
-
-      // Hallazgos — no bloqueante
-      try {
-        const r = await fetch(`${API_BASE}/legacy/reportes/informe-general/hallazgos-trampeo?${qs}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (r.ok) setHallazgos((await r.json()) as Hallazgos);
-      } catch {
-        // silencioso
-      }
     } finally {
       // Garantiza que el botón siempre vuelve al estado original,
       // aunque alguna fase haya tirado un error no capturado.
