@@ -55,7 +55,7 @@ jobs:
           VITE_TURNSTILE_SITE_KEY: ${{ secrets.VITE_TURNSTILE_SITE_KEY }}
         run: npm run build
 
-      # ── Conexión SSH al server ────────────────────────────────
+      # ── SSH setup ─────────────────────────────────────────────
       - name: Cargar SSH key
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -68,6 +68,7 @@ jobs:
 
       # ── Fase "as sudoer": tomar ownership ─────────────────────
       - name: Tomar ownership de los directorios deploy
+        id: take_ownership
         run: |
           ssh -p ${{ secrets.DEPLOY_SSH_PORT || '22' }} \
               ${{ secrets.DEPLOY_SSH_USER }}@${{ secrets.DEPLOY_SSH_HOST }} \
@@ -115,11 +116,9 @@ jobs:
                 touch tmp/restart.txt
               "'
 
-      # ── Fase "as sudoer" final: devolver ownership al user Plesk ──
-      # if: always() garantiza que corra incluso si pasos anteriores fallaron,
-      # para no dejar el sitio con permisos rotos.
+      # ── Restore ownership (solo si tomamos ownership antes) ──
       - name: Restaurar ownership al usuario Plesk
-        if: always()
+        if: always() && steps.take_ownership.conclusion == 'success'
         run: |
           ssh -p ${{ secrets.DEPLOY_SSH_PORT || '22' }} \
               ${{ secrets.DEPLOY_SSH_USER }}@${{ secrets.DEPLOY_SSH_HOST }} \
