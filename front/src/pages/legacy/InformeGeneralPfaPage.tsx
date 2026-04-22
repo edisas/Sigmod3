@@ -626,7 +626,12 @@ function Card({ roman, titulo, icon, status, semanaIni, semanaFin, children }: {
             <Icon name="check_circle" className="text-emerald-500 text-base" />
           )}
         </header>
-        <table className="w-full text-sm">
+        <table className="w-full text-sm table-fixed">
+          <colgroup>
+            <col />
+            <col style={{ width: '10rem' }} />
+            <col style={{ width: '12rem' }} />
+          </colgroup>
           <tbody>{children}</tbody>
         </table>
       </section>
