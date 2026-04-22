@@ -5,7 +5,7 @@ from threading import Lock
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from app.api.routes.legacy.dependencies import get_current_legacy_claims, get_legacy_db
@@ -56,6 +56,38 @@ class SemanaOption(BaseModel):
     fecha_inicio: date
     fecha_final: date
     label: str
+
+
+class PfaOption(BaseModel):
+    folio: int
+    nombre: str
+    cedula: str | None
+    label: str
+
+
+class HuertoPorPfaItem(BaseModel):
+    numero_inscripcion: str
+    nombre_unidad: str | None
+    ubicacion: str | None
+    nombre_propietario: str | None
+    direccion: str | None
+    telefono: str | None
+    especie: str | None
+    destino: str | None
+    folio_ruta: int | None
+    nombre_ruta: str | None
+    clave_pfa: int
+    nombre_pfa: str
+    superficies: dict[int, float]  # variedad_folio → hectáreas
+    total_superficie: float
+
+
+class HuertosPorPfaResponse(BaseModel):
+    pfa: PfaOption
+    variedades: list[CatalogoItem]
+    huertos: list[HuertoPorPfaItem]
+    total_huertos: int
+    total_superficie_global: float
 
 
 def _compute_concentrado(
@@ -229,4 +261,148 @@ def concentrado_en_linea_semanal(
         session,
         extra_where="AND tmi.semana = :semana_str",
         extra_params={"semana_str": str(semana_id)},
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Reporte: Resumen de Huertos por PFA
+# ──────────────────────────────────────────────────────────────────────
+
+PFA_CARGO_LIKE = "%PROFESIONAL%FITOS%"
+
+
+@router.get("/huertos-por-pfa/pfas", response_model=list[PfaOption])
+def pfas_con_tmimf(session: Session = Depends(get_legacy_db)) -> list[PfaOption]:
+    """
+    Devuelve solo los PFAs (profesional fitosanitario autorizado) que tengan
+    al menos una TMIMF emitida (status != 'C').
+    """
+    rows = session.execute(text("""
+        SELECT f.folio, f.nombre, f.cedula
+        FROM cat_funcionarios f
+        WHERE UPPER(f.cargo) LIKE :cargo
+          AND f.folio IN (
+              SELECT DISTINCT t.clave_aprobado
+              FROM tmimf t
+              WHERE t.clave_aprobado IS NOT NULL
+                AND t.status <> 'C'
+          )
+        ORDER BY f.nombre
+    """), {"cargo": PFA_CARGO_LIKE}).mappings().all()
+
+    return [
+        PfaOption(
+            folio=int(r["folio"]),
+            nombre=str(r["nombre"] or "").strip(),
+            cedula=(str(r["cedula"]).strip() if r["cedula"] else None),
+            label=f'{str(r["nombre"] or "").strip()} ({str(r["cedula"] or "").strip()})'
+                  if r["cedula"] else str(r["nombre"] or "").strip(),
+        )
+        for r in rows
+    ]
+
+
+@router.get("/huertos-por-pfa", response_model=HuertosPorPfaResponse)
+def huertos_por_pfa(
+    pfa_folio: int = Query(..., ge=1, description="folio de cat_funcionarios"),
+    session: Session = Depends(get_legacy_db),
+) -> HuertosPorPfaResponse:
+    pfa_row = session.execute(text("""
+        SELECT f.folio, f.nombre, f.cedula
+        FROM cat_funcionarios f
+        WHERE f.folio = :id AND UPPER(f.cargo) LIKE :cargo
+    """), {"id": pfa_folio, "cargo": PFA_CARGO_LIKE}).mappings().first()
+    if not pfa_row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"PFA folio={pfa_folio} no encontrado",
+        )
+
+    pfa = PfaOption(
+        folio=int(pfa_row["folio"]),
+        nombre=str(pfa_row["nombre"] or "").strip(),
+        cedula=(str(pfa_row["cedula"]).strip() if pfa_row["cedula"] else None),
+        label=str(pfa_row["nombre"] or "").strip(),
+    )
+
+    variedades_rows = session.execute(text("""
+        SELECT folio, descripcion FROM cat_variedades
+        WHERE especie = :especie ORDER BY descripcion
+    """), {"especie": ESPECIE_FILTRO}).mappings().all()
+    variedades = [CatalogoItem(folio=int(r["folio"]), nombre=str(r["descripcion"])) for r in variedades_rows]
+    variedades_validas = {v.folio for v in variedades}
+
+    huertos_rows = session.execute(text("""
+        SELECT
+          sv.numeroinscripcion                             AS numero_inscripcion,
+          sv.nombre_unidad,
+          sv.ubicacion,
+          sv.nombre_propietario,
+          sv.direccion,
+          sv.telefono,
+          e.nombre                                         AS especie,
+          m.descripcion                                    AS destino,
+          r.folio                                          AS folio_ruta,
+          r.nombre_ruta,
+          r.clave_pfa                                      AS clave_pfa,
+          f.nombre                                         AS nombre_pfa
+        FROM sv01_sv02 sv
+        JOIN cat_rutas r         ON r.folio = sv.folio_ruta
+        JOIN cat_funcionarios f  ON f.folio = r.clave_pfa
+        LEFT JOIN cat_especies e ON e.folio = sv.clave_especie
+        LEFT JOIN cat_mercado m  ON m.folio = sv.mercado_destino
+        WHERE r.clave_pfa = :pfa
+          AND sv.status = 'A'
+        ORDER BY TRIM(sv.numeroinscripcion)
+    """), {"pfa": pfa_folio}).mappings().all()
+
+    inscripciones = [str(r["numero_inscripcion"]).strip() for r in huertos_rows]
+
+    superficies_map: dict[str, dict[int, float]] = {}
+    if inscripciones:
+        sup_rows = session.execute(
+            text("""
+                SELECT TRIM(numeroinscripcion) AS ni, variedad, superficie
+                FROM cat_superficie_registrada
+                WHERE TRIM(numeroinscripcion) IN :nis
+            """).bindparams(bindparam("nis", expanding=True)),
+            {"nis": inscripciones},
+        ).mappings().all()
+        for sr in sup_rows:
+            ni = str(sr["ni"])
+            var = int(sr["variedad"] or 0)
+            if var not in variedades_validas:
+                continue
+            superficies_map.setdefault(ni, {})[var] = float(sr["superficie"] or 0)
+
+    huertos: list[HuertoPorPfaItem] = []
+    total_global = 0.0
+    for r in huertos_rows:
+        ni = str(r["numero_inscripcion"]).strip()
+        sup_item = {int(k): round(float(v), 4) for k, v in superficies_map.get(ni, {}).items()}
+        total = round(sum(sup_item.values()), 4)
+        total_global += total
+        huertos.append(HuertoPorPfaItem(
+            numero_inscripcion=ni,
+            nombre_unidad=r["nombre_unidad"],
+            ubicacion=r["ubicacion"],
+            nombre_propietario=r["nombre_propietario"],
+            direccion=r["direccion"],
+            telefono=r["telefono"],
+            especie=r["especie"],
+            destino=r["destino"],
+            folio_ruta=int(r["folio_ruta"]) if r["folio_ruta"] else None,
+            nombre_ruta=r["nombre_ruta"],
+            clave_pfa=int(r["clave_pfa"]),
+            nombre_pfa=str(r["nombre_pfa"] or "").strip(),
+            superficies=sup_item,
+            total_superficie=total,
+        ))
+
+    return HuertosPorPfaResponse(
+        pfa=pfa,
+        variedades=variedades,
+        huertos=huertos,
+        total_huertos=len(huertos),
+        total_superficie_global=round(total_global, 4),
     )

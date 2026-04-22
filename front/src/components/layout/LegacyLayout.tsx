@@ -30,6 +30,7 @@ const navTree: NavNode[] = [
     children: [
       { to: '/legacy/reportes/concentrado-en-linea', icon: 'insights', label: 'Movilización en línea' },
       { to: '/legacy/reportes/concentrado-en-linea-semanal', icon: 'date_range', label: 'Movilización semanal' },
+      { to: '/legacy/reportes/huertos-por-pfa', icon: 'badge', label: 'Huertos por PFA' },
     ],
   },
 ];

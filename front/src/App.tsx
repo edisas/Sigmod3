@@ -34,6 +34,7 @@ import LegacyLoginPage from '@/pages/legacy/LegacyLoginPage';
 import LegacyDashboardPage from '@/pages/legacy/LegacyDashboardPage';
 import ConcentradoEnLineaPage from '@/pages/legacy/ConcentradoEnLineaPage';
 import ConcentradoEnLineaSemanalPage from '@/pages/legacy/ConcentradoEnLineaSemanalPage';
+import HuertosPorPfaPage from '@/pages/legacy/HuertosPorPfaPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 import ForbiddenPage from '@/pages/ForbiddenPage';
 import ServerErrorPage from '@/pages/ServerErrorPage';
@@ -64,6 +65,7 @@ export default function App() {
               <Route path="/legacy" element={<LegacyDashboardPage />} />
               <Route path="/legacy/reportes/concentrado-en-linea" element={<ConcentradoEnLineaPage />} />
               <Route path="/legacy/reportes/concentrado-en-linea-semanal" element={<ConcentradoEnLineaSemanalPage />} />
+              <Route path="/legacy/reportes/huertos-por-pfa" element={<HuertosPorPfaPage />} />
             </Route>
 
             {/* Protected Admin Routes */}
