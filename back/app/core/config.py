@@ -13,10 +13,6 @@ class Settings(BaseSettings):
 
     database_url: str = "mysql+pymysql://sigmod_user:change_password@127.0.0.1:3306/sigmod_v3?charset=utf8mb4"
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173"
-    turnstile_enabled: bool = False
-    turnstile_secret_key: str = ""
-    turnstile_verify_url: str = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
-    turnstile_expected_hostname: str | None = None
 
     legacy_db_host: str = "127.0.0.1"
     legacy_db_port: int = 3306
@@ -25,7 +21,7 @@ class Settings(BaseSettings):
     legacy_secret_key: str = "change-this-legacy-secret-key"
     legacy_token_expire_minutes: int = 60
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", case_sensitive=False)
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore")
 
     @property
     def cors_origins_list(self) -> list[str]:

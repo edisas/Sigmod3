@@ -51,8 +51,6 @@ jobs:
         working-directory: front
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
-          VITE_TURNSTILE_ENABLED: ${{ secrets.VITE_TURNSTILE_ENABLED }}
-          VITE_TURNSTILE_SITE_KEY: ${{ secrets.VITE_TURNSTILE_SITE_KEY }}
         run: npm run build
 
       # ── SSH setup ─────────────────────────────────────────────

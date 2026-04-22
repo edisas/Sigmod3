@@ -11,13 +11,11 @@ class RegisterRequest(BaseModel):
     rol_id: int
     figura_cooperadora_id: int | None = None
     password: str = Field(min_length=8, max_length=128)
-    captcha_token: str | None = Field(default=None, max_length=2048)
 
 
 class LoginRequest(BaseModel):
     nombre_usuario: str = Field(min_length=3, max_length=50)
     password: str = Field(min_length=4, max_length=128)
-    captcha_token: str | None = Field(default=None, max_length=2048)
 
 
 class SelectStateRequest(BaseModel):

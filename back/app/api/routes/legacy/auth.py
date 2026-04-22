@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.api.routes.legacy.dependencies import get_current_legacy_claims, get_legacy_db
 from app.core.legacy_db import get_session, list_available_bases
 from app.core.legacy_security import create_legacy_token
+from app.core.rate_limit import rate_limit
 
 router = APIRouter()
 
@@ -61,7 +62,11 @@ def _fetch_user_by_id(session: Session, user_id: int) -> dict | None:
     return dict(row) if row else None
 
 
-@router.post("/login", response_model=LegacyLoginResponse)
+@router.post(
+    "/login",
+    response_model=LegacyLoginResponse,
+    dependencies=[Depends(rate_limit("legacy-login", max_attempts=10, window_seconds=900))],
+)
 def login(payload: LegacyLoginRequest) -> LegacyLoginResponse:
     clave = payload.legacy_db.upper().strip()
     try:

@@ -1,7 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Icon from '@/components/ui/Icon';
-import TurnstileWidget from '@/components/auth/TurnstileWidget';
 import { useAuth } from '@/context/AuthContext';
 import { sanitizeInput, loginRateLimiter } from '@/utils/security';
 import {
@@ -20,9 +19,6 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [captchaToken, setCaptchaToken] = useState('');
-  const captchaEnabled = import.meta.env.VITE_TURNSTILE_ENABLED === 'true';
-  const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY ?? '';
 
   useEffect(() => {
     void fetchPublicAssets(API_BASE)
@@ -49,12 +45,7 @@ export default function LoginPage() {
 
     loginRateLimiter.recordAttempt(cleanUser);
 
-    if (captchaEnabled && !captchaToken) {
-      setError('Completa el captcha para continuar.');
-      return;
-    }
-
-    const result = await login(cleanUser, password, captchaEnabled ? captchaToken : undefined);
+    const result = await login(cleanUser, password);
     if (result.success) {
       navigate(result.redirectTo || '/');
     } else {
@@ -157,20 +148,6 @@ export default function LoginPage() {
                 Recordar este dispositivo
               </label>
             </div>
-
-            {captchaEnabled && (
-              <div>
-                {turnstileSiteKey ? (
-                <TurnstileWidget
-                  siteKey={turnstileSiteKey}
-                  onToken={(token) => setCaptchaToken(token)}
-                  onError={() => setError('No fue posible cargar el captcha.')}
-                />
-              ) : (
-                <p className="text-sm text-red-600">Falta configurar VITE_TURNSTILE_SITE_KEY en el frontend.</p>
-              )}
-              </div>
-            )}
 
             <button
               type="submit"

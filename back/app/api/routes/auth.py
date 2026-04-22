@@ -3,6 +3,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.core.rate_limit import rate_limit
 from app.core.security import create_access_token, decode_token, hash_password, verify_password
 from app.db import get_db
 from app.dependencies import get_current_state_id, get_current_user
@@ -212,7 +213,12 @@ def generate_unique_username(db: Session, email: str) -> str:
     return candidate
 
 
-@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=TokenResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("v3-register", max_attempts=5, window_seconds=3600))],
+)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> TokenResponse:
     exists = db.query(User).filter(User.email == payload.email.lower().strip()).first()
     if exists:
@@ -306,7 +312,11 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> TokenRe
     return build_login_response(user, user_states)
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post(
+    "/login",
+    response_model=TokenResponse,
+    dependencies=[Depends(rate_limit("v3-login", max_attempts=10, window_seconds=900))],
+)
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     user = (
         db.query(User)

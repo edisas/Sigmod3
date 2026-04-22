@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useCallback, useEffect, type React
 import type { User, AuthState } from '@/types';
 
 interface AuthContextType extends AuthState {
-  login: (nombreUsuario: string, password: string, captchaToken?: string) => Promise<{ success: boolean; redirectTo: string }>;
+  login: (nombreUsuario: string, password: string) => Promise<{ success: boolean; redirectTo: string }>;
   logout: () => void;
   register: (data: {
     fullName: string;
@@ -11,7 +11,6 @@ interface AuthContextType extends AuthState {
     estadosIds: number[];
     rolId: number;
     figuraCooperadoraId?: number | null;
-    captchaToken?: string;
   }) => Promise<{ success: boolean; redirectTo: string }>;
 }
 
@@ -112,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void bootstrap();
   }, []);
 
-  const login = useCallback(async (nombreUsuario: string, password: string, captchaToken?: string): Promise<{ success: boolean; redirectTo: string }> => {
+  const login = useCallback(async (nombreUsuario: string, password: string): Promise<{ success: boolean; redirectTo: string }> => {
     setState((prev) => ({ ...prev, isLoading: true }));
     try {
       const data = await apiRequest<AuthApiResponse>('/auth/login', {
@@ -120,7 +119,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({
           nombre_usuario: nombreUsuario,
           password,
-          ...(captchaToken ? { captcha_token: captchaToken } : {}),
         }),
       });
 
@@ -171,7 +169,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     estadosIds: number[];
     rolId: number;
     figuraCooperadoraId?: number | null;
-    captchaToken?: string;
   }): Promise<{ success: boolean; redirectTo: string }> => {
     setState((prev) => ({ ...prev, isLoading: true }));
     try {
@@ -184,7 +181,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           estados_ids: data.estadosIds,
           rol_id: data.rolId,
           figura_cooperadora_id: data.figuraCooperadoraId ?? null,
-          ...(data.captchaToken ? { captcha_token: data.captchaToken } : {}),
         }),
       });
 

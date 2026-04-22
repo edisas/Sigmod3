@@ -1,7 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Icon from '@/components/ui/Icon';
-import TurnstileWidget from '@/components/auth/TurnstileWidget';
 import { useAuth } from '@/context/AuthContext';
 import { sanitizeInput, isValidEmail, validatePassword } from '@/utils/security';
 import {
@@ -46,9 +45,6 @@ export default function RegisterPage() {
   const [rolesDisponibles, setRolesDisponibles] = useState<RolItem[]>([]);
   const [figurasDisponibles, setFigurasDisponibles] = useState<FiguraItem[]>([]);
   const [estadosError, setEstadosError] = useState('');
-  const [captchaToken, setCaptchaToken] = useState('');
-  const captchaEnabled = import.meta.env.VITE_TURNSTILE_ENABLED === 'true';
-  const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY ?? '';
 
   useEffect(() => {
     const loadCatalogos = async () => {
@@ -115,7 +111,6 @@ export default function RegisterPage() {
     if (!pwResult.isValid) newErrors.password = pwResult.errors[0];
     if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = 'Las contraseñas no coinciden';
     if (!formData.acceptTerms) newErrors.acceptTerms = 'Debes aceptar los términos';
-    if (captchaEnabled && !captchaToken) newErrors.captcha = 'Completa el captcha';
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -131,7 +126,6 @@ export default function RegisterPage() {
       estadosIds: formData.estadosIds,
       rolId: Number(formData.rolId),
       figuraCooperadoraId: formData.figuraCooperadoraId ? Number(formData.figuraCooperadoraId) : null,
-      captchaToken: captchaEnabled ? captchaToken : undefined,
     });
     if (result.success) navigate(result.redirectTo || '/solicitud-acceso?new=1');
   };
@@ -373,24 +367,6 @@ export default function RegisterPage() {
                 </label>
               </div>
               {errors.acceptTerms && <p className="text-xs text-red-500">{errors.acceptTerms}</p>}
-
-              {captchaEnabled && (
-                <div className="space-y-2">
-                  {turnstileSiteKey ? (
-                  <TurnstileWidget
-                    siteKey={turnstileSiteKey}
-                    onToken={(token) => {
-                      setCaptchaToken(token);
-                      setErrors((prev) => ({ ...prev, captcha: '' }));
-                    }}
-                    onError={() => setErrors((prev) => ({ ...prev, captcha: 'No fue posible cargar el captcha' }))}
-                  />
-                ) : (
-                  <p className="text-sm text-red-600">Falta configurar VITE_TURNSTILE_SITE_KEY en el frontend.</p>
-                )}
-                  {errors.captcha && <p className="text-xs text-red-500">{errors.captcha}</p>}
-                </div>
-              )}
 
               <button
                 type="submit"
