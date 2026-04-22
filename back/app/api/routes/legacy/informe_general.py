@@ -7,7 +7,6 @@ consultas a trampas_revision + identificacion (fértil/estéril), control_quimic
 (estaciones cebo) y control_mecanico_cultural (árboles, has rastreadas).
 
 Si no hay TMIMF del PFA en el rango → informe "sin actividad".
-Si hay revisiones de trampeo sin TMIMF 'O' asociada → hallazgos en página aparte.
 """
 
 from datetime import datetime
@@ -24,7 +23,6 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm, mm
 from reportlab.platypus import (
     Image,
-    PageBreak,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -101,19 +99,6 @@ class GeneralidadesSeccion(BaseModel):
     embarques_nacional: int
     toneladas_exportacion: float
     toneladas_nacional: float
-
-
-class HallazgoTrampeo(BaseModel):
-    numeroinscripcion: str
-    no_trampa: str
-    no_semana: int
-    fecha_revision: str | None
-    status_revision: int
-
-
-class HallazgosSeccion(BaseModel):
-    total: int
-    items: list[HallazgoTrampeo]
 
 
 class PfaInfo(BaseModel):
@@ -411,50 +396,6 @@ def _compute_generalidades(session: Session, params: dict) -> GeneralidadesSecci
     )
 
 
-def _compute_hallazgos(session: Session, params: dict, limit: int | None = None) -> HallazgosSeccion:
-    """Revisiones de trampeo sin TMIMF 'O' asociada para ese huerto+semana."""
-    rows = session.execute(text("""
-        SELECT
-          TRIM(tp.numeroinscripcion) AS numeroinscripcion,
-          tr.no_trampa,
-          tr.no_semana,
-          tr.fecha_revision,
-          tr.status_revision
-        FROM trampas_revision tr
-        JOIN trampas tp ON tp.no_trampa = tr.no_trampa
-        JOIN sv01_sv02 sv ON TRIM(sv.numeroinscripcion) = TRIM(tp.numeroinscripcion)
-        JOIN cat_rutas r ON r.folio = sv.folio_ruta
-        WHERE r.clave_pfa = :pfa
-          AND tr.no_semana BETWEEN :s_ini AND :s_fin
-          AND tr.status_revision IN :rev
-          AND NOT EXISTS (
-              SELECT 1 FROM tmimf tmi
-              WHERE tmi.clave_aprobado = :pfa
-                AND tmi.tipo_tarjeta = 'O'
-                AND tmi.status = 'A'
-                AND TRIM(tmi.numeroinscripcion) = TRIM(tp.numeroinscripcion)
-                AND CAST(NULLIF(tmi.semana,'') AS UNSIGNED) = tr.no_semana
-          )
-        ORDER BY tr.no_semana ASC, TRIM(tp.numeroinscripcion) ASC, tr.no_trampa ASC
-    """).bindparams(**{"rev": list(REV_STATUS_REVISADAS)}), params).mappings().all()
-
-    total = len(rows)
-    if limit is not None:
-        rows = rows[:limit]
-
-    items = [
-        HallazgoTrampeo(
-            numeroinscripcion=str(r["numeroinscripcion"] or ""),
-            no_trampa=str(r["no_trampa"] or ""),
-            no_semana=int(r["no_semana"] or 0),
-            fecha_revision=(r["fecha_revision"].isoformat() if r["fecha_revision"] else None),
-            status_revision=int(r["status_revision"] or 0),
-        )
-        for r in rows
-    ]
-    return HallazgosSeccion(total=total, items=items)
-
-
 # ──────────────────────────────────────────────────────────────────────
 # HTTP endpoints (JSON)
 # ──────────────────────────────────────────────────────────────────────
@@ -496,12 +437,6 @@ def generalidades(params: dict = Depends(_params), session: Session = Depends(ge
     return _compute_generalidades(session, params)
 
 
-@router.get("/hallazgos-trampeo", response_model=HallazgosSeccion)
-def hallazgos_trampeo(params: dict = Depends(_params), session: Session = Depends(get_legacy_db)) -> HallazgosSeccion:
-    _validar_pfa_y_rango(session, **params)
-    return _compute_hallazgos(session, params)
-
-
 @router.get("/tiene-actividad", response_model=dict)
 def tiene_actividad(params: dict = Depends(_params), session: Session = Depends(get_legacy_db)) -> dict:
     _validar_pfa_y_rango(session, **params)
@@ -519,10 +454,6 @@ COLOR_TEXTO = colors.HexColor("#1F2937")
 COLOR_SECUNDARIO = colors.HexColor("#6B7280")
 COLOR_BANDA = colors.HexColor("#F0F5EB")
 COLOR_HIGHLIGHT = colors.HexColor("#D9EBCB")
-COLOR_WARN = colors.HexColor("#C84141")
-COLOR_WARN_BANDA = colors.HexColor("#FDECEC")
-
-PAGE_HALLAZGOS_MAX_FILAS = 38  # filas que caben en una página con la tipografía actual
 
 
 def _meses_es() -> list[str]:
@@ -600,44 +531,6 @@ def _tabla_indicadores(rows: list[tuple[str, str, str]], mtd_highlight_index: in
         style.add("BACKGROUND", (0, row), (-1, row), COLOR_HIGHLIGHT)
         style.add("FONTNAME", (0, row), (-1, row), "Helvetica-Bold")
     t.setStyle(style)
-    return t
-
-
-_STATUS_REV_LABEL = {1: "Revisada", 2: "Con captura", 6: "Extemporánea"}
-
-
-def _tabla_hallazgos(items: list[HallazgoTrampeo]) -> Table:
-    header = [("SEMANA", "HUERTO (INSCRIPCIÓN)", "TRAMPA", "FECHA REVISIÓN", "ESTADO")]
-    data = header + [
-        (
-            str(h.no_semana),
-            h.numeroinscripcion,
-            h.no_trampa,
-            h.fecha_revision or "—",
-            _STATUS_REV_LABEL.get(h.status_revision, str(h.status_revision)),
-        )
-        for h in items
-    ]
-    t = Table(data, colWidths=[1.8 * cm, 5.6 * cm, 3.8 * cm, 3.2 * cm, 3.0 * cm])
-    t.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), COLOR_WARN),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 7.5),
-        ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-        ("FONTSIZE", (0, 1), (-1, -1), 7.5),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN", (0, 0), (0, -1), "CENTER"),
-        ("ALIGN", (2, 0), (2, -1), "CENTER"),
-        ("ALIGN", (3, 0), (3, -1), "CENTER"),
-        ("ALIGN", (4, 0), (4, -1), "CENTER"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 5),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-        ("TOPPADDING", (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, COLOR_WARN_BANDA]),
-        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#E5E7EB")),
-    ]))
     return t
 
 
@@ -762,16 +655,6 @@ def _make_styles():
         fontName="Helvetica", fontSize=11, textColor=COLOR_TEXTO,
         alignment=TA_CENTER, leading=18, spaceBefore=40,
     ))
-    styles.add(ParagraphStyle(
-        "HallazgoTitulo", parent=styles["Normal"],
-        fontName="Helvetica-Bold", fontSize=11, textColor=COLOR_WARN,
-        alignment=TA_CENTER, leading=14, spaceAfter=4,
-    ))
-    styles.add(ParagraphStyle(
-        "HallazgoSubt", parent=styles["Normal"],
-        fontName="Helvetica", fontSize=8.5, textColor=COLOR_SECUNDARIO,
-        alignment=TA_CENTER, leading=11, spaceAfter=6,
-    ))
     return styles
 
 
@@ -819,7 +702,6 @@ def informe_pdf(
     quimico = _compute_control_quimico(session, params, agregado)
     cultural = _compute_control_cultural(session, params, agregado)
     generalidades_data = _compute_generalidades(session, params)
-    hallazgos = _compute_hallazgos(session, params, limit=PAGE_HALLAZGOS_MAX_FILAS)
 
     SPACE = 4
 
@@ -893,20 +775,6 @@ def informe_pdf(
     # ── Firma (al final de la pág. 2) ───────────────────
     story.append(Spacer(1, 22))
     story.append(_build_firma(pfa, styles))
-
-    # ── Página 3 (opcional): Hallazgos ──────────────────
-    if hallazgos.total > 0:
-        story.append(PageBreak())
-        story.append(Paragraph("HALLAZGOS DE TRAMPEO SIN TMIMF ASOCIADA", styles["HallazgoTitulo"]))
-        hay_mas = hallazgos.total - len(hallazgos.items)
-        subt = (
-            f"Se detectaron {hallazgos.total} revisiones de trampeo "
-            f"sin TMIMF tipo 'O' correspondiente para el huerto y semana."
-        )
-        if hay_mas > 0:
-            subt += f" Se muestran las primeras {len(hallazgos.items)}; hay {hay_mas} registro(s) adicional(es) no listado(s)."
-        story.append(Paragraph(subt, styles["HallazgoSubt"]))
-        story.append(_tabla_hallazgos(hallazgos.items))
 
     doc.build(story, onFirstPage=_draw_page, onLaterPages=_draw_page)
     buffer.seek(0)
