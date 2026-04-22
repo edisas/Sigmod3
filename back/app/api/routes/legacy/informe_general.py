@@ -42,6 +42,7 @@ REV_STATUS_REVISADAS = (1, 2, 6)
 PFA_CARGO_LIKE = "%PROFESIONAL%FITOS%"
 MTD_UMBRAL_ALTA = 1.0
 MTD_UMBRAL_BAJA = 0.0
+MAX_SEMANAS_RANGO = 4
 
 LOGO_PATH = Path(__file__).resolve().parent.parent.parent.parent / "app" / "assets" / "senasica.png"
 if not LOGO_PATH.exists():
@@ -130,6 +131,12 @@ class PfaInfo(BaseModel):
 def _validar_pfa_y_rango(session: Session, pfa: int, s_ini: int, s_fin: int) -> PfaInfo:
     if s_ini > s_fin:
         raise HTTPException(status_code=400, detail="semana_inicio debe ser ≤ semana_fin")
+    semanas = s_fin - s_ini + 1
+    if semanas > MAX_SEMANAS_RANGO:
+        raise HTTPException(
+            status_code=400,
+            detail=f"El rango no puede exceder {MAX_SEMANAS_RANGO} semanas (seleccionaste {semanas}).",
+        )
     row = session.execute(
         text("SELECT folio, nombre, cedula, cargo FROM cat_funcionarios WHERE folio = :p AND UPPER(cargo) LIKE :c"),
         {"p": pfa, "c": PFA_CARGO_LIKE},

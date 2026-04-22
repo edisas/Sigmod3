@@ -3,6 +3,7 @@ import Icon from '@/components/ui/Icon';
 import { useLegacyAuth } from '@/context/LegacyAuthContext';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
+const MAX_SEMANAS_RANGO = 4;
 
 // ───────────────────────── Types ─────────────────────────
 
@@ -82,6 +83,7 @@ export default function InformeGeneralPfaPage() {
 
   const [contexto, setContexto] = useState<{ pfa: PfaOption; sIni: SemanaOption; sFin: SemanaOption } | null>(null);
   const [descargandoPdf, setDescargandoPdf] = useState(false);
+  const [rangoError, setRangoError] = useState('');
 
   // Carga inicial de catálogos
   useEffect(() => {
@@ -124,89 +126,112 @@ export default function InformeGeneralPfaPage() {
     });
     setPhaseError({});
     setContexto(null);
+    setRangoError('');
   };
 
   const handleSelectChange = () => {
-    if (seccionHuertos || seccionTrampeo || seccionMuestreo) resetData();
+    if (contexto || sinActividad) resetData();
   };
+
+  // Cuántas semanas cubre el rango (solo si ambas están en el catálogo)
+  const semanasEnRango = (() => {
+    if (semIni === null || semFin === null) return 0;
+    const ini = semanas.find((s) => s.folio === semIni);
+    const fin = semanas.find((s) => s.folio === semFin);
+    if (!ini || !fin) return 0;
+    // semanas.folio es cronológico (a más folio, más reciente)
+    if (ini.folio > fin.folio) return 0;
+    return fin.folio - ini.folio + 1;
+  })();
+
+  const rangoExcedido = semanasEnRango > MAX_SEMANAS_RANGO;
+  const rangoInvalido = semanasEnRango <= 0;
 
   const handleGenerar = async () => {
     if (!token || pfaFolio === null || semIni === null || semFin === null) return;
-    if (semIni > semFin) {
-      alert('La semana inicial debe ser menor o igual a la final.');
+    if (rangoInvalido) {
+      setRangoError('La semana inicial debe ser anterior o igual a la final.');
       return;
     }
-    resetData();
+    if (rangoExcedido) {
+      setRangoError(`El rango no puede exceder ${MAX_SEMANAS_RANGO} semanas (seleccionaste ${semanasEnRango}).`);
+      return;
+    }
     const pfaSel = pfas.find((p) => p.folio === pfaFolio);
     const sIniSel = semanas.find((s) => s.folio === semIni);
     const sFinSel = semanas.find((s) => s.folio === semFin);
     if (!pfaSel || !sIniSel || !sFinSel) return;
+
+    resetData();
     setContexto({ pfa: pfaSel, sIni: sIniSel, sFin: sFinSel });
     setGenerando(true);
 
     const qs = `pfa_folio=${pfaFolio}&semana_inicio=${semIni}&semana_fin=${semFin}`;
 
-    // Gate: ¿tiene actividad?
     try {
-      const r = await fetch(`${API_BASE}/legacy/reportes/informe-general/tiene-actividad?${qs}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (r.ok) {
-        const { tiene_actividad } = (await r.json()) as { tiene_actividad: boolean };
-        if (!tiene_actividad) {
-          setSinActividad(true);
-          setGenerando(false);
-          return;
-        }
-      }
-    } catch {
-      // si el gate falla, seguimos y dejamos que los endpoints propios reporten
-    }
-
-    // Marca todos en loading
-    setPhaseStatus({
-      'huertos': 'loading', 'trampeo': 'loading', 'muestreo': 'loading',
-      'control-quimico': 'loading', 'control-cultural': 'loading', 'generalidades': 'loading',
-    });
-
-    const fetchPhase = async <T,>(phase: PhaseKey, ep: string, setter: (d: T) => void) => {
+      // Gate: ¿tiene actividad?
       try {
-        const res = await fetch(`${API_BASE}/legacy/reportes/informe-general/${ep}?${qs}`, {
+        const r = await fetch(`${API_BASE}/legacy/reportes/informe-general/tiene-actividad?${qs}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({} as { detail?: string }));
-          throw new Error(body.detail ?? `HTTP ${res.status}`);
+        if (r.ok) {
+          const { tiene_actividad } = (await r.json()) as { tiene_actividad: boolean };
+          if (!tiene_actividad) {
+            setSinActividad(true);
+            return;
+          }
         }
-        const data = (await res.json()) as T;
-        setter(data);
-        setPhaseStatus((prev) => ({ ...prev, [phase]: 'done' }));
-      } catch (err) {
-        setPhaseStatus((prev) => ({ ...prev, [phase]: 'error' }));
-        setPhaseError((prev) => ({ ...prev, [phase]: err instanceof Error ? err.message : 'Error' }));
+      } catch {
+        // si el gate falla, seguimos y dejamos que los endpoints propios reporten
       }
-    };
 
-    await Promise.all([
-      fetchPhase<Huertos>('huertos', 'huertos', setSeccionHuertos),
-      fetchPhase<Trampeo>('trampeo', 'trampeo', setSeccionTrampeo),
-      fetchPhase<Muestreo>('muestreo', 'muestreo', setSeccionMuestreo),
-      fetchPhase<ControlQuimico>('control-quimico', 'control-quimico', setSeccionQuimico),
-      fetchPhase<ControlCultural>('control-cultural', 'control-cultural', setSeccionCultural),
-      fetchPhase<Generalidades>('generalidades', 'generalidades', setSeccionGeneralidades),
-    ]);
-
-    // Hallazgos — no bloqueante, se carga en paralelo al final
-    try {
-      const r = await fetch(`${API_BASE}/legacy/reportes/informe-general/hallazgos-trampeo?${qs}`, {
-        headers: { Authorization: `Bearer ${token}` },
+      // Marca todos en loading
+      setPhaseStatus({
+        'huertos': 'loading', 'trampeo': 'loading', 'muestreo': 'loading',
+        'control-quimico': 'loading', 'control-cultural': 'loading', 'generalidades': 'loading',
       });
-      if (r.ok) setHallazgos((await r.json()) as Hallazgos);
-    } catch {
-      // silencioso
-    }
 
-    setGenerando(false);
+      const fetchPhase = async <T,>(phase: PhaseKey, ep: string, setter: (d: T) => void) => {
+        try {
+          const res = await fetch(`${API_BASE}/legacy/reportes/informe-general/${ep}?${qs}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({} as { detail?: string }));
+            throw new Error(body.detail ?? `HTTP ${res.status}`);
+          }
+          const data = (await res.json()) as T;
+          setter(data);
+          setPhaseStatus((prev) => ({ ...prev, [phase]: 'done' }));
+        } catch (err) {
+          setPhaseStatus((prev) => ({ ...prev, [phase]: 'error' }));
+          setPhaseError((prev) => ({ ...prev, [phase]: err instanceof Error ? err.message : 'Error' }));
+        }
+      };
+
+      await Promise.all([
+        fetchPhase<Huertos>('huertos', 'huertos', setSeccionHuertos),
+        fetchPhase<Trampeo>('trampeo', 'trampeo', setSeccionTrampeo),
+        fetchPhase<Muestreo>('muestreo', 'muestreo', setSeccionMuestreo),
+        fetchPhase<ControlQuimico>('control-quimico', 'control-quimico', setSeccionQuimico),
+        fetchPhase<ControlCultural>('control-cultural', 'control-cultural', setSeccionCultural),
+        fetchPhase<Generalidades>('generalidades', 'generalidades', setSeccionGeneralidades),
+      ]);
+
+      // Hallazgos — no bloqueante
+      try {
+        const r = await fetch(`${API_BASE}/legacy/reportes/informe-general/hallazgos-trampeo?${qs}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (r.ok) setHallazgos((await r.json()) as Hallazgos);
+      } catch {
+        // silencioso
+      }
+    } finally {
+      // Garantiza que el botón siempre vuelve al estado original,
+      // aunque alguna fase haya tirado un error no capturado.
+      setGenerando(false);
+    }
   };
 
   const handleDescargarPdf = async () => {
@@ -263,8 +288,8 @@ export default function InformeGeneralPfaPage() {
             <select
               id="pfa"
               value={pfaFolio ?? ''}
-              onChange={(e) => { setPfaFolio(Number(e.target.value)); handleSelectChange(); }}
-              disabled={loadingCatalogs}
+              onChange={(e) => { setPfaFolio(Number(e.target.value)); setRangoError(''); handleSelectChange(); }}
+              disabled={loadingCatalogs || generando}
               className="input-field"
             >
               {pfas.map((p) => (
@@ -279,8 +304,8 @@ export default function InformeGeneralPfaPage() {
             <select
               id="sini"
               value={semIni ?? ''}
-              onChange={(e) => { setSemIni(Number(e.target.value)); handleSelectChange(); }}
-              disabled={loadingCatalogs}
+              onChange={(e) => { setSemIni(Number(e.target.value)); setRangoError(''); handleSelectChange(); }}
+              disabled={loadingCatalogs || generando}
               className="input-field"
             >
               {semanas.slice().reverse().map((s) => (
@@ -295,8 +320,8 @@ export default function InformeGeneralPfaPage() {
             <select
               id="sfin"
               value={semFin ?? ''}
-              onChange={(e) => { setSemFin(Number(e.target.value)); handleSelectChange(); }}
-              disabled={loadingCatalogs}
+              onChange={(e) => { setSemFin(Number(e.target.value)); setRangoError(''); handleSelectChange(); }}
+              disabled={loadingCatalogs || generando}
               className="input-field"
             >
               {semanas.map((s) => (
@@ -305,11 +330,11 @@ export default function InformeGeneralPfaPage() {
             </select>
           </div>
         </div>
-        <div className="mt-4 flex items-center gap-3">
+        <div className="mt-4 flex items-center gap-3 flex-wrap">
           <button
             type="button"
             onClick={handleGenerar}
-            disabled={generando || loadingCatalogs || pfaFolio === null || semIni === null || semFin === null}
+            disabled={generando || loadingCatalogs || pfaFolio === null || semIni === null || semFin === null || rangoExcedido || rangoInvalido}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold"
           >
             {generando ? (
@@ -324,7 +349,20 @@ export default function InformeGeneralPfaPage() {
               </>
             )}
           </button>
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            Rango seleccionado: <span className={`font-semibold tabular-nums ${rangoExcedido ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'}`}>
+              {semanasEnRango > 0 ? `${semanasEnRango} ${semanasEnRango === 1 ? 'semana' : 'semanas'}` : '—'}
+            </span> · máximo {MAX_SEMANAS_RANGO}
+          </span>
         </div>
+        {(rangoExcedido || rangoInvalido || rangoError) && (
+          <div className="mt-3 p-2.5 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 flex items-center gap-2">
+            <Icon name="error" className="text-rose-500 text-base shrink-0" />
+            {rangoError || (rangoExcedido
+              ? `El rango no puede exceder ${MAX_SEMANAS_RANGO} semanas (seleccionaste ${semanasEnRango}).`
+              : 'La semana inicial debe ser anterior o igual a la final.')}
+          </div>
+        )}
       </section>
 
       {/* Barra de progreso por fase */}
@@ -394,8 +432,8 @@ export default function InformeGeneralPfaPage() {
         </section>
       )}
 
-      {/* Resultado del informe */}
-      {contexto && !sinActividad && phasesDone === phasesTotal && (
+      {/* Resultado del informe (se muestra cuando termina, sin importar si alguna fase tuvo error) */}
+      {contexto && !sinActividad && !generando && (
         <InformeResultado
           contexto={contexto}
           huertos={seccionHuertos}
