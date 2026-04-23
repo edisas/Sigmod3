@@ -187,7 +187,7 @@ def top_especies(
                    SUM(IFNULL(i.hembras_esteril,0))   AS he,
                    SUM(IFNULL(i.machos_esteril,0))    AS me
               FROM identificacion i
-              LEFT JOIN cat_especies e ON e.folio = i.tipo_especie
+              LEFT JOIN cat_especie_mosca e ON e.folio = i.tipo_especie
              WHERE i.no_semana BETWEEN :fmin AND :fmax
                AND i.tipo_especie IS NOT NULL
              GROUP BY i.tipo_especie, e.nombre

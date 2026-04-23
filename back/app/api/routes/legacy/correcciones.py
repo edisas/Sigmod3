@@ -330,7 +330,7 @@ def catalogos(
         text("SELECT folio, nombre FROM cat_productos ORDER BY nombre")
     ).mappings().all()
     especies = session.execute(
-        text("SELECT folio, nombre FROM cat_especies ORDER BY nombre, folio")
+        text("SELECT folio, nombre FROM cat_especie_mosca ORDER BY nombre, folio")
     ).mappings().all()
     return CatalogosCorreccion(
         status_revision=[CatalogoItem(**dict(r)) for r in status],
