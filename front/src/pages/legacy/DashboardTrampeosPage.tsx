@@ -36,8 +36,13 @@ interface PfaCap {
   revisiones_con_captura: number; silvestre: number; esteril: number;
   semanas_con_captura: number;
 }
+interface ModuloCap {
+  modulo_folio: number; nombre_modulo: string;
+  revisiones_con_captura: number; huertos_con_captura: number;
+  silvestre: number; esteril: number; mtd_modulo: number;
+}
 
-type PhaseKey = 'resumen' | 'especies' | 'sexo' | 'por-semana' | 'por-pfa';
+type PhaseKey = 'resumen' | 'especies' | 'sexo' | 'por-semana' | 'por-pfa' | 'por-modulo';
 type PhaseStatus = 'pending' | 'loading' | 'done' | 'error';
 
 interface PhaseDef { key: PhaseKey; roman: string; label: string; icon: string }
@@ -47,6 +52,7 @@ const PHASES: PhaseDef[] = [
   { key: 'sexo',       roman: 'III', label: 'Hembras vs machos', icon: 'pie_chart' },
   { key: 'por-semana', roman: 'IV',  label: 'Capturas por semana', icon: 'timeline' },
   { key: 'por-pfa',    roman: 'V',   label: 'Ranking por PFA',   icon: 'leaderboard' },
+  { key: 'por-modulo', roman: 'VI',  label: 'MTD por módulo',    icon: 'apartment' },
 ];
 
 // ───────────────────────── Format helpers ─────────────────────────
@@ -66,20 +72,21 @@ export default function DashboardTrampeosPage() {
   const [sexo, setSexo]             = useState<SexoTotales | null>(null);
   const [porSemana, setPorSemana]   = useState<SemanaCap[] | null>(null);
   const [porPfa, setPorPfa]         = useState<PfaCap[] | null>(null);
+  const [porModulo, setPorModulo]   = useState<ModuloCap[] | null>(null);
 
   const [phaseStatus, setPhaseStatus] = useState<Record<PhaseKey, PhaseStatus>>({
     'resumen': 'pending', 'especies': 'pending', 'sexo': 'pending',
-    'por-semana': 'pending', 'por-pfa': 'pending',
+    'por-semana': 'pending', 'por-pfa': 'pending', 'por-modulo': 'pending',
   });
   const [phaseError, setPhaseError] = useState<Partial<Record<PhaseKey, string>>>({});
   const [generando, setGenerando]   = useState(false);
   const generationIdRef = useRef(0);
 
   const resetData = () => {
-    setResumen(null); setEspecies(null); setSexo(null); setPorSemana(null); setPorPfa(null);
+    setResumen(null); setEspecies(null); setSexo(null); setPorSemana(null); setPorPfa(null); setPorModulo(null);
     setPhaseStatus({
       'resumen': 'pending', 'especies': 'pending', 'sexo': 'pending',
-      'por-semana': 'pending', 'por-pfa': 'pending',
+      'por-semana': 'pending', 'por-pfa': 'pending', 'por-modulo': 'pending',
     });
     setPhaseError({});
   };
@@ -92,7 +99,7 @@ export default function DashboardTrampeosPage() {
     // arranque de fases
     setPhaseStatus({
       'resumen': 'loading', 'especies': 'loading', 'sexo': 'loading',
-      'por-semana': 'loading', 'por-pfa': 'loading',
+      'por-semana': 'loading', 'por-pfa': 'loading', 'por-modulo': 'loading',
     });
 
     const runPhase = async <T,>(key: PhaseKey, ep: string, setter: (d: T) => void) => {
@@ -122,6 +129,7 @@ export default function DashboardTrampeosPage() {
         runPhase<SexoTotales>('sexo',       'sexo',       setSexo),
         runPhase<SemanaCap[]>('por-semana', 'por-semana', setPorSemana),
         runPhase<PfaCap[]>('por-pfa',       'por-pfa',    setPorPfa),
+        runPhase<ModuloCap[]>('por-modulo', 'por-modulo', setPorModulo),
       ]);
     } finally {
       if (generationIdRef.current === myGenId) setGenerando(false);
@@ -240,6 +248,7 @@ export default function DashboardTrampeosPage() {
         </div>
         <SectionPorSemana data={porSemana} />
         <SectionPorPfa data={porPfa} />
+        <SectionPorModulo data={porModulo} />
       </PhaseStatusContext.Provider>
     </div>
   );
@@ -247,7 +256,7 @@ export default function DashboardTrampeosPage() {
 
 // Contexto para skeleton por sección
 const PhaseStatusContext = createContext<Record<PhaseKey, PhaseStatus>>({
-  'resumen': 'done', 'especies': 'done', 'sexo': 'done', 'por-semana': 'done', 'por-pfa': 'done',
+  'resumen': 'done', 'especies': 'done', 'sexo': 'done', 'por-semana': 'done', 'por-pfa': 'done', 'por-modulo': 'done',
 });
 
 function useSectionStatus(key: PhaseKey): PhaseStatus {
@@ -531,6 +540,74 @@ function SectionPorPfa({ data }: { data: PfaCap[] | null }) {
                   </td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SectionPorModulo({ data }: { data: ModuloCap[] | null }) {
+  const st = useSectionStatus('por-modulo');
+  const loading = st === 'loading' || st === 'pending';
+  const maxTotal = (data ?? []).reduce((m, x) => Math.max(m, x.silvestre + x.esteril), 1);
+  const maxMtd   = (data ?? []).reduce((m, x) => Math.max(m, x.mtd_modulo), 0.0001);
+  return (
+    <section className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Icon name="apartment" className="text-amber-700 dark:text-amber-400" />
+        <h2 className="text-sm font-semibold uppercase tracking-wide">MTD y capturas por módulo</h2>
+      </div>
+      {loading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-6 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />)}
+        </div>
+      ) : !data || data.length === 0 ? (
+        <p className="text-sm text-slate-500 dark:text-slate-400">Sin capturas por módulo en este rango.</p>
+      ) : (
+        <div className="animate-fade-in overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase tracking-wider text-slate-600 dark:text-slate-300">
+              <tr>
+                <th className="px-2 py-2 text-left">#</th>
+                <th className="px-2 py-2 text-left">Módulo</th>
+                <th className="px-2 py-2 text-left w-[30%]">Capturas (silv+est)</th>
+                <th className="px-2 py-2 text-right">Silvestre</th>
+                <th className="px-2 py-2 text-right">Estéril</th>
+                <th className="px-2 py-2 text-right">Huertos</th>
+                <th className="px-2 py-2 text-left w-[20%]">MTD módulo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((m, i) => {
+                const total = m.silvestre + m.esteril;
+                return (
+                  <tr key={m.modulo_folio} className="border-t border-slate-100 dark:border-slate-800">
+                    <td className="px-2 py-2 tabular-nums text-slate-500">{i + 1}</td>
+                    <td className="px-2 py-2 text-slate-900 dark:text-slate-100 font-medium">{m.nombre_modulo}</td>
+                    <td className="px-2 py-2">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-3 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                          <div className="h-full bg-amber-500" style={{ width: `${(total / maxTotal) * 100}%` }} />
+                        </div>
+                        <span className="tabular-nums text-xs w-14 text-right">{fInt(total)}</span>
+                      </div>
+                    </td>
+                    <td className="px-2 py-2 text-right tabular-nums">{fInt(m.silvestre)}</td>
+                    <td className="px-2 py-2 text-right tabular-nums">{fInt(m.esteril)}</td>
+                    <td className="px-2 py-2 text-right tabular-nums">{fInt(m.huertos_con_captura)}</td>
+                    <td className="px-2 py-2">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-3 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                          <div className="h-full bg-rose-500" style={{ width: `${(m.mtd_modulo / maxMtd) * 100}%` }} />
+                        </div>
+                        <span className="tabular-nums text-xs w-16 text-right">{fDec(m.mtd_modulo, 4)}</span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

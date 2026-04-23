@@ -88,6 +88,16 @@ class PfaCaptura(BaseModel):
     semanas_con_captura: int  # "frecuencia": en cuántas semanas distintas capturó
 
 
+class ModuloCaptura(BaseModel):
+    modulo_folio: int
+    nombre_modulo: str
+    revisiones_con_captura: int
+    huertos_con_captura: int
+    silvestre: int
+    esteril: int
+    mtd_modulo: float  # weighted avg sobre TMIMF 'O' del módulo
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────────────────────────────
@@ -329,7 +339,7 @@ def top_pfas(
                    COUNT(DISTINCT i.no_semana) AS semanas_cap
               FROM identificacion i
               JOIN trampas tp  ON tp.no_trampa = i.no_trampa
-              JOIN sv01_sv02 sv ON TRIM(sv.numeroinscripcion) COLLATE latin1_general_ci = TRIM(tp.numeroinscripcion)
+              JOIN sv01_sv02 sv ON BINARY TRIM(sv.numeroinscripcion) = BINARY TRIM(tp.numeroinscripcion)
               JOIN cat_rutas r ON r.folio = sv.folio_ruta
               LEFT JOIN cat_funcionarios f ON f.folio = r.clave_pfa
              WHERE i.no_semana BETWEEN :fmin AND :fmax
@@ -351,3 +361,98 @@ def top_pfas(
         )
         for r in rows
     ]
+
+
+@router.get("/por-modulo", response_model=list[ModuloCaptura])
+def por_modulo(
+    semanas: int = Query(default=10, ge=1, le=52),
+    session: Session = Depends(get_legacy_db),
+    _claims: dict = Depends(get_current_legacy_claims),
+) -> list[ModuloCaptura]:
+    fmin, fmax = _rango_semanas(session, semanas)
+    if fmax == 0:
+        return []
+
+    # Agregación 2-pasos con merge en Python: `trampas` no tiene índice en
+    # no_trampa, así que el JOIN SQL tardaba 14-24s. Hacemos: (1) leer
+    # identificación en rango (usa índice de no_semana); (2) leer el mapa
+    # trampa→módulo una sola vez; (3) agregamos en diccionarios locales.
+    ident_rows = session.execute(
+        text("""
+            SELECT no_trampa, folio_revision,
+                   IFNULL(hembras_silvestre,0) hs, IFNULL(machos_silvestre,0) ms,
+                   IFNULL(hembras_esteril,0)   he, IFNULL(machos_esteril,0)   me
+              FROM identificacion
+             WHERE no_semana BETWEEN :fmin AND :fmax
+        """),
+        {"fmin": fmin, "fmax": fmax},
+    ).mappings().all()
+
+    trampa_to_modulo: dict[str, tuple[int, str, str]] = {}
+    for r in session.execute(
+        text("""
+            SELECT t.no_trampa, TRIM(t.numeroinscripcion) AS ni,
+                   m.folio AS modulo_folio, m.nombre_modulo
+              FROM trampas t
+              JOIN cat_rutas r   ON r.folio = t.folio_ruta
+              JOIN cat_modulos m ON m.folio = r.modulo
+        """),
+    ).mappings().all():
+        trampa_to_modulo[str(r["no_trampa"])] = (int(r["modulo_folio"]), str(r["nombre_modulo"] or ""), str(r["ni"] or ""))
+
+    by_modulo: dict[int, dict] = {}
+    for r in ident_rows:
+        nt = str(r["no_trampa"])
+        info = trampa_to_modulo.get(nt)
+        if not info: continue
+        mf, nombre, ni = info
+        agg = by_modulo.setdefault(mf, {"nombre": nombre, "revs": set(), "huertos": set(), "silv": 0, "estr": 0})
+        agg["revs"].add(int(r["folio_revision"]))
+        if ni: agg["huertos"].add(ni)
+        agg["silv"] += int(r["hs"] or 0) + int(r["ms"] or 0)
+        agg["estr"] += int(r["he"] or 0) + int(r["me"] or 0)
+
+    cap_rows = [
+        {"modulo_folio": mf, "nombre_modulo": d["nombre"],
+         "revs": len(d["revs"]), "huertos": len(d["huertos"]),
+         "silv": d["silv"], "estr": d["estr"]}
+        for mf, d in by_modulo.items()
+    ]
+
+    # MTD por módulo: tmimf.modulo_emisor está poblado al 100% en TMIMF tipo 'O'
+    # activas (verificado en 8 BDs); JOIN directo contra cat_modulos sin
+    # sv01_sv02 — evita string JOIN y baja de 14-24s → <1s.
+    mtd_rows = session.execute(
+        text("""
+            SELECT tmi.modulo_emisor AS modulo_folio,
+                   SUM(CAST(IFNULL(tmi.mtd_promedio_semanal,0) AS DECIMAL(14,6))
+                       * IFNULL(tmi.trampas_revisadas,0)) AS num,
+                   SUM(IFNULL(tmi.trampas_revisadas,0))   AS den
+              FROM tmimf tmi
+             WHERE tmi.tipo_tarjeta = 'O' AND tmi.status = 'A'
+               AND tmi.modulo_emisor IS NOT NULL
+               AND CAST(NULLIF(tmi.semana,'') AS UNSIGNED) BETWEEN :fmin AND :fmax
+             GROUP BY tmi.modulo_emisor
+        """),
+        {"fmin": fmin, "fmax": fmax},
+    ).mappings().all()
+    mtd_map: dict[int, float] = {}
+    for m in mtd_rows:
+        den = float(m["den"] or 0)
+        mtd_map[int(m["modulo_folio"])] = (float(m["num"] or 0) / den) if den > 0 else 0.0
+
+    out: list[ModuloCaptura] = []
+    for r in cap_rows:
+        mf = int(r["modulo_folio"])
+        out.append(ModuloCaptura(
+            modulo_folio=mf,
+            nombre_modulo=str(r["nombre_modulo"] or f"#{mf}"),
+            revisiones_con_captura=int(r["revs"] or 0),
+            huertos_con_captura=int(r["huertos"] or 0),
+            silvestre=int(r["silv"] or 0),
+            esteril=int(r["estr"] or 0),
+            mtd_modulo=round(mtd_map.get(mf, 0.0), 4),
+        ))
+    # orden por total de moscas desc
+    out.sort(key=lambda x: -(x.silvestre + x.esteril))
+    return out

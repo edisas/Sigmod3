@@ -272,7 +272,7 @@ def _compute_trampeo(session: Session, params: dict, agregado: list[dict] | None
           COUNT(DISTINCT CASE WHEN IFNULL(i.hembras_esteril,0)+IFNULL(i.machos_esteril,0)>0 THEN tr.no_trampa END)     AS esteril
         FROM trampas_revision tr
         JOIN trampas tp ON tp.no_trampa = tr.no_trampa
-        JOIN sv01_sv02 sv ON TRIM(sv.numeroinscripcion) COLLATE latin1_general_ci = TRIM(tp.numeroinscripcion)
+        JOIN sv01_sv02 sv ON BINARY TRIM(sv.numeroinscripcion) = BINARY TRIM(tp.numeroinscripcion)
         JOIN cat_rutas r ON r.folio = sv.folio_ruta
         LEFT JOIN identificacion i ON i.no_trampa = tr.no_trampa AND i.no_semana = tr.no_semana
         WHERE r.clave_pfa = :pfa

@@ -66,6 +66,16 @@ class DashboardOverviewResponse(BaseModel):
     generated_at: float
 
 
+class ModuloOverview(BaseModel):
+    modulo_folio: int
+    nombre_modulo: str
+    huertos_activos: int
+    rutas: int
+    trampas_instaladas: int
+    tmimfs_emitidas: int  # tipo 'M' no canceladas
+    toneladas_movilizadas: float
+
+
 def _build_overview(session: Session) -> dict:
     kpi_row = session.execute(text("""
         SELECT
@@ -245,6 +255,59 @@ def _build_comparativo_mercado(session: Session, ultimas_n: int) -> ComparativoS
         exportacion=[round(exp.get(s.folio, 0.0), 3) for s in semanas],
         nacional=[round(nac.get(s.folio, 0.0), 3) for s in semanas],
     )
+
+
+@router.get("/por-modulo", response_model=list[ModuloOverview])
+def por_modulo(
+    claims: dict = Depends(get_current_legacy_claims),
+    session: Session = Depends(get_legacy_db),
+) -> list[ModuloOverview]:
+    """Indicadores por módulo para el dashboard principal — acumulados del período vigente."""
+    rows = session.execute(
+        text("""
+            SELECT m.folio AS modulo_folio, m.nombre_modulo,
+                   (SELECT COUNT(*)
+                      FROM sv01_sv02 sv2
+                      JOIN cat_rutas r2 ON r2.folio = sv2.folio_ruta
+                     WHERE r2.modulo = m.folio
+                       AND sv2.status = 'A' AND sv2.clave_especie = :especie) AS huertos,
+                   (SELECT COUNT(*)
+                      FROM cat_rutas r3
+                     WHERE r3.modulo = m.folio
+                       AND (r3.status IS NULL OR r3.status = 'A')) AS rutas,
+                   (SELECT COUNT(*)
+                      FROM trampas tp
+                      JOIN cat_rutas r4 ON r4.folio = tp.folio_ruta
+                     WHERE r4.modulo = m.folio
+                       AND (tp.status IS NULL OR tp.status = 'A')) AS trampas_inst,
+                   (SELECT COUNT(*)
+                      FROM tmimf tmi
+                     WHERE tmi.modulo_emisor = m.folio
+                       AND tmi.tipo_tarjeta = 'M' AND tmi.status <> 'C') AS tmimfs,
+                   (SELECT COALESCE(SUM(det.cantidad_movilizada), 0)
+                      FROM detallado_tmimf det
+                      JOIN tmimf tmi2         ON tmi2.folio_tmimf = det.folio_completo
+                      JOIN cat_variedades v2  ON v2.folio = det.variedad_movilizada
+                     WHERE tmi2.modulo_emisor = m.folio
+                       AND det.status <> 'C'
+                       AND v2.especie = :especie) AS cantidad_kg
+              FROM cat_modulos m
+             ORDER BY m.nombre_modulo ASC
+        """),
+        {"especie": ESPECIE_FILTRO},
+    ).mappings().all()
+    return [
+        ModuloOverview(
+            modulo_folio=int(r["modulo_folio"]),
+            nombre_modulo=str(r["nombre_modulo"] or f"#{r['modulo_folio']}"),
+            huertos_activos=int(r["huertos"] or 0),
+            rutas=int(r["rutas"] or 0),
+            trampas_instaladas=int(r["trampas_inst"] or 0),
+            tmimfs_emitidas=int(r["tmimfs"] or 0),
+            toneladas_movilizadas=round(float(r["cantidad_kg"] or 0) / UNIT_DIVISOR, 3),
+        )
+        for r in rows
+    ]
 
 
 @router.get("/overview", response_model=DashboardOverviewResponse)

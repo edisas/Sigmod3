@@ -31,8 +31,13 @@ interface Pfa {
   clave_pfa: number; nombre: string; inicial: string | null;
   muestreos: number; kgs: number; semanas_con_muestreo: number; huertos_muestreados: number;
 }
+interface Modulo {
+  modulo_folio: number; nombre_modulo: string;
+  muestreos: number; kgs: number; huertos_muestreados: number;
+  debidos: number; cumplidos: number; porcentaje_cumplimiento: number;
+}
 
-type PhaseKey = 'resumen' | 'cumplimiento' | 'muestreos-variedad' | 'kgs-variedad' | 'por-pfa';
+type PhaseKey = 'resumen' | 'cumplimiento' | 'muestreos-variedad' | 'kgs-variedad' | 'por-pfa' | 'por-modulo';
 type PhaseStatus = 'pending' | 'loading' | 'done' | 'error';
 interface PhaseDef { key: PhaseKey; roman: string; label: string; icon: string }
 const PHASES: PhaseDef[] = [
@@ -41,6 +46,7 @@ const PHASES: PhaseDef[] = [
   { key: 'muestreos-variedad',   roman: 'III', label: 'Muestreos por variedad', icon: 'category' },
   { key: 'kgs-variedad',         roman: 'IV',  label: 'Kg por variedad',      icon: 'scale' },
   { key: 'por-pfa',              roman: 'V',   label: 'Ranking por PFA',      icon: 'leaderboard' },
+  { key: 'por-modulo',           roman: 'VI',  label: 'Muestreo por módulo',  icon: 'apartment' },
 ];
 
 // ───────────────────────── Format helpers ─────────────────────────
@@ -61,20 +67,21 @@ export default function DashboardMuestreoPage() {
   const [muesVar, setMuesVar]               = useState<VarSem[] | null>(null);
   const [kgsVar, setKgsVar]                 = useState<VarSem[] | null>(null);
   const [porPfa, setPorPfa]                 = useState<Pfa[] | null>(null);
+  const [porModulo, setPorModulo]           = useState<Modulo[] | null>(null);
 
   const [phaseStatus, setPhaseStatus] = useState<Record<PhaseKey, PhaseStatus>>({
     'resumen': 'pending', 'cumplimiento': 'pending', 'muestreos-variedad': 'pending',
-    'kgs-variedad': 'pending', 'por-pfa': 'pending',
+    'kgs-variedad': 'pending', 'por-pfa': 'pending', 'por-modulo': 'pending',
   });
   const [phaseError, setPhaseError] = useState<Partial<Record<PhaseKey, string>>>({});
   const [generando, setGenerando]   = useState(false);
   const generationIdRef = useRef(0);
 
   const resetData = () => {
-    setResumen(null); setCumplimiento(null); setMuesVar(null); setKgsVar(null); setPorPfa(null);
+    setResumen(null); setCumplimiento(null); setMuesVar(null); setKgsVar(null); setPorPfa(null); setPorModulo(null);
     setPhaseStatus({
       'resumen': 'pending', 'cumplimiento': 'pending', 'muestreos-variedad': 'pending',
-      'kgs-variedad': 'pending', 'por-pfa': 'pending',
+      'kgs-variedad': 'pending', 'por-pfa': 'pending', 'por-modulo': 'pending',
     });
     setPhaseError({});
   };
@@ -86,7 +93,7 @@ export default function DashboardMuestreoPage() {
     const myGenId = ++generationIdRef.current;
     setPhaseStatus({
       'resumen': 'loading', 'cumplimiento': 'loading', 'muestreos-variedad': 'loading',
-      'kgs-variedad': 'loading', 'por-pfa': 'loading',
+      'kgs-variedad': 'loading', 'por-pfa': 'loading', 'por-modulo': 'loading',
     });
 
     const runPhase = async <T,>(key: PhaseKey, ep: string, setter: (d: T) => void) => {
@@ -116,6 +123,7 @@ export default function DashboardMuestreoPage() {
         runPhase<VarSem[]>('muestreos-variedad',      'muestreos-por-variedad', setMuesVar),
         runPhase<VarSem[]>('kgs-variedad',            'kgs-por-variedad',      setKgsVar),
         runPhase<Pfa[]>('por-pfa',                    'por-pfa',               setPorPfa),
+        runPhase<Modulo[]>('por-modulo',              'por-modulo',            setPorModulo),
       ]);
     } finally {
       if (generationIdRef.current === myGenId) setGenerando(false);
@@ -226,13 +234,14 @@ export default function DashboardMuestreoPage() {
           <SectionVariedadKgs data={kgsVar} />
         </div>
         <SectionPorPfa data={porPfa} />
+        <SectionPorModulo data={porModulo} />
       </PhaseStatusContext.Provider>
     </div>
   );
 }
 
 const PhaseStatusContext = createContext<Record<PhaseKey, PhaseStatus>>({
-  'resumen': 'done', 'cumplimiento': 'done', 'muestreos-variedad': 'done', 'kgs-variedad': 'done', 'por-pfa': 'done',
+  'resumen': 'done', 'cumplimiento': 'done', 'muestreos-variedad': 'done', 'kgs-variedad': 'done', 'por-pfa': 'done', 'por-modulo': 'done',
 });
 function useSectionStatus(key: PhaseKey): PhaseStatus {
   return useContext(PhaseStatusContext)[key];
@@ -538,6 +547,70 @@ function SectionPorPfa({ data }: { data: Pfa[] | null }) {
                     <span className="inline-block px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-xs font-semibold">
                       {p.semanas_con_muestreo} sem
                     </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SectionPorModulo({ data }: { data: Modulo[] | null }) {
+  const st = useSectionStatus('por-modulo');
+  const loading = st === 'loading' || st === 'pending';
+  const maxMues = (data ?? []).reduce((m, x) => Math.max(m, x.muestreos), 1);
+  return (
+    <section className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Icon name="apartment" className="text-amber-700 dark:text-amber-400" />
+        <h2 className="text-sm font-semibold uppercase tracking-wide">Muestreo por módulo (cumplimiento)</h2>
+      </div>
+      {loading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-6 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />)}
+        </div>
+      ) : !data || data.length === 0 ? (
+        <p className="text-sm text-slate-500 dark:text-slate-400">Sin muestreos por módulo en este rango.</p>
+      ) : (
+        <div className="animate-fade-in overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase tracking-wider text-slate-600 dark:text-slate-300">
+              <tr>
+                <th className="px-2 py-2 text-left">#</th>
+                <th className="px-2 py-2 text-left">Módulo</th>
+                <th className="px-2 py-2 text-left w-[28%]">Muestreos</th>
+                <th className="px-2 py-2 text-right">Kg</th>
+                <th className="px-2 py-2 text-right">Huertos</th>
+                <th className="px-2 py-2 text-right">Cumplimiento</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((m, i) => (
+                <tr key={m.modulo_folio} className="border-t border-slate-100 dark:border-slate-800">
+                  <td className="px-2 py-2 tabular-nums text-slate-500">{i + 1}</td>
+                  <td className="px-2 py-2 text-slate-900 dark:text-slate-100 font-medium">{m.nombre_modulo}</td>
+                  <td className="px-2 py-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-3 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                        <div className="h-full bg-amber-500" style={{ width: `${(m.muestreos / maxMues) * 100}%` }} />
+                      </div>
+                      <span className="tabular-nums text-xs w-14 text-right">{fInt(m.muestreos)}</span>
+                    </div>
+                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums">{fKg(m.kgs)}</td>
+                  <td className="px-2 py-2 text-right tabular-nums">{fInt(m.huertos_muestreados)}</td>
+                  <td className="px-2 py-2 text-right">
+                    <div className="flex items-center gap-2 justify-end">
+                      <span className="tabular-nums text-[11px] text-slate-500">{m.cumplidos} / {m.debidos}</span>
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold tabular-nums ${
+                        m.porcentaje_cumplimiento >= 80 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                        m.porcentaje_cumplimiento >= 50 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                                                         'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'
+                      }`}>{fPct(m.porcentaje_cumplimiento)}</span>
+                    </div>
                   </td>
                 </tr>
               ))}

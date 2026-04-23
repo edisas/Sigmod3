@@ -34,6 +34,16 @@ interface DashboardOverview {
   generated_at: number;
 }
 
+interface ModuloOverview {
+  modulo_folio: number;
+  nombre_modulo: string;
+  huertos_activos: number;
+  rutas: number;
+  trampas_instaladas: number;
+  tmimfs_emitidas: number;
+  toneladas_movilizadas: number;
+}
+
 const LINE_PALETTE = ['#f59e0b', '#0ea5e9', '#10b981', '#8b5cf6', '#ec4899', '#ef4444', '#14b8a6', '#eab308'];
 
 const formatInt = (n: number) => n.toLocaleString('es-MX');
@@ -43,6 +53,7 @@ const formatTon = (n: number) =>
 export default function LegacyDashboardPage() {
   const { user, token } = useLegacyAuth();
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
+  const [modulos, setModulos]   = useState<ModuloOverview[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -52,11 +63,14 @@ export default function LegacyDashboardPage() {
       setLoading(true);
       setError('');
       try {
-        const res = await fetch(`${API_BASE}/legacy/dashboard/overview`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        setOverview((await res.json()) as DashboardOverview);
+        const h = { Authorization: `Bearer ${token}` };
+        const [ovRes, modRes] = await Promise.all([
+          fetch(`${API_BASE}/legacy/dashboard/overview`,   { headers: h }),
+          fetch(`${API_BASE}/legacy/dashboard/por-modulo`, { headers: h }),
+        ]);
+        if (!ovRes.ok) throw new Error(`HTTP ${ovRes.status}`);
+        setOverview((await ovRes.json()) as DashboardOverview);
+        if (modRes.ok) setModulos((await modRes.json()) as ModuloOverview[]);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Error al cargar el dashboard');
       } finally {
@@ -241,6 +255,44 @@ export default function LegacyDashboardPage() {
             </div>
           </section>
         </>
+      )}
+
+      {/* Indicadores por módulo */}
+      {modulos && modulos.length > 0 && (
+        <section className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+          <header className="px-5 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 flex items-center gap-3">
+            <Icon name="apartment" className="text-amber-700 dark:text-amber-400" />
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
+              Indicadores por módulo
+            </h2>
+          </header>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-xs uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                <tr>
+                  <th className="px-3 py-2 text-left">Módulo</th>
+                  <th className="px-3 py-2 text-right">Rutas</th>
+                  <th className="px-3 py-2 text-right">Huertos activos</th>
+                  <th className="px-3 py-2 text-right">Trampas instaladas</th>
+                  <th className="px-3 py-2 text-right">TMIMFs emitidas</th>
+                  <th className="px-3 py-2 text-right">Toneladas movilizadas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {modulos.map((m) => (
+                  <tr key={m.modulo_folio} className="border-t border-slate-100 dark:border-slate-800">
+                    <td className="px-3 py-2 font-medium text-slate-900 dark:text-slate-100">{m.nombre_modulo}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatInt(m.rutas)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatInt(m.huertos_activos)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatInt(m.trampas_instaladas)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatInt(m.tmimfs_emitidas)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatTon(m.toneladas_movilizadas)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
 
       {/* Accesos rápidos */}

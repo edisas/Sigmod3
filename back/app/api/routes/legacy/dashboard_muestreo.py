@@ -76,6 +76,17 @@ class PfaMuestreo(BaseModel):
     huertos_muestreados: int
 
 
+class ModuloMuestreo(BaseModel):
+    modulo_folio: int
+    nombre_modulo: str
+    muestreos: int
+    kgs: float
+    huertos_muestreados: int
+    debidos: int
+    cumplidos: int
+    porcentaje_cumplimiento: float
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────────────────────────────
@@ -355,3 +366,92 @@ def top_pfas(
         )
         for r in rows
     ]
+
+
+@router.get("/por-modulo", response_model=list[ModuloMuestreo])
+def por_modulo(
+    semanas: int = Query(default=10, ge=1, le=52),
+    session: Session = Depends(get_legacy_db),
+    _claims: dict = Depends(get_current_legacy_claims),
+) -> list[ModuloMuestreo]:
+    fmin, fmax = _rango_semanas(session, semanas)
+    if fmax == 0:
+        return []
+
+    # Muestreos por módulo (hechos)
+    cap_rows = session.execute(
+        text("""
+            SELECT m.folio AS modulo_folio, m.nombre_modulo,
+                   COUNT(*) AS muestreos,
+                   COALESCE(SUM(mf.kgs_muestreados), 0) AS kgs,
+                   COUNT(DISTINCT mf.numeroinscripcion) AS huertos
+              FROM muestreo_de_frutos mf
+              JOIN sv01_sv02 sv  ON sv.numeroinscripcion = mf.numeroinscripcion
+              JOIN cat_rutas r   ON r.folio = sv.folio_ruta
+              JOIN cat_modulos m ON m.folio = r.modulo
+             WHERE mf.no_semana BETWEEN :fmin AND :fmax
+             GROUP BY m.folio, m.nombre_modulo
+        """),
+        {"fmin": fmin, "fmax": fmax},
+    ).mappings().all()
+
+    # Debidos + cumplidos por módulo — usa tmimf.modulo_emisor directo (sin
+    # JOIN a sv01_sv02, baja de 7-9s → <1s en Oaxaca/Chiapas).
+    cump_rows = session.execute(
+        text("""
+            SELECT deb.modulo_folio,
+                   COUNT(*) AS debidos,
+                   SUM(CASE WHEN mu.numeroinscripcion IS NOT NULL THEN 1 ELSE 0 END) AS cumplidos
+              FROM (
+                SELECT DISTINCT t.modulo_emisor AS modulo_folio,
+                                t.numeroinscripcion,
+                                CAST(NULLIF(t.semana,'') AS UNSIGNED) AS sem
+                  FROM tmimf t
+                 WHERE t.tipo_tarjeta = 'O' AND t.status = 'A' AND t.estado_fenologico = 3
+                   AND t.modulo_emisor IS NOT NULL
+                   AND CAST(NULLIF(t.semana,'') AS UNSIGNED) BETWEEN :fmin AND :fmax
+              ) deb
+              LEFT JOIN (
+                SELECT DISTINCT numeroinscripcion, no_semana
+                  FROM muestreo_de_frutos
+                 WHERE no_semana BETWEEN :fmin AND :fmax
+              ) mu ON mu.numeroinscripcion = deb.numeroinscripcion
+                  AND mu.no_semana        = deb.sem
+             GROUP BY deb.modulo_folio
+        """),
+        {"fmin": fmin, "fmax": fmax},
+    ).mappings().all()
+    cump_map: dict[int, tuple[int, int]] = {}
+    for r in cump_rows:
+        cump_map[int(r["modulo_folio"])] = (int(r["debidos"] or 0), int(r["cumplidos"] or 0))
+
+    out: list[ModuloMuestreo] = []
+    seen_modulos = {int(r["modulo_folio"]) for r in cap_rows}
+    for r in cap_rows:
+        mf = int(r["modulo_folio"])
+        debidos, cumplidos = cump_map.get(mf, (0, 0))
+        pct = round((cumplidos * 100.0 / debidos), 2) if debidos > 0 else 0.0
+        out.append(ModuloMuestreo(
+            modulo_folio=mf,
+            nombre_modulo=str(r["nombre_modulo"] or f"#{mf}"),
+            muestreos=int(r["muestreos"] or 0),
+            kgs=float(r["kgs"] or 0),
+            huertos_muestreados=int(r["huertos"] or 0),
+            debidos=debidos,
+            cumplidos=cumplidos,
+            porcentaje_cumplimiento=pct,
+        ))
+    # Agregar módulos que tienen debidos pero 0 muestreos (cumplimiento = 0)
+    for mf, (debidos, cumplidos) in cump_map.items():
+        if mf not in seen_modulos and debidos > 0:
+            nombre = session.execute(
+                text("SELECT nombre_modulo FROM cat_modulos WHERE folio=:f"), {"f": mf},
+            ).scalar() or f"#{mf}"
+            out.append(ModuloMuestreo(
+                modulo_folio=mf,
+                nombre_modulo=str(nombre),
+                muestreos=0, kgs=0.0, huertos_muestreados=0,
+                debidos=debidos, cumplidos=cumplidos, porcentaje_cumplimiento=0.0,
+            ))
+    out.sort(key=lambda x: -x.muestreos)
+    return out
