@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import Icon from '@/components/ui/Icon';
 import { useLegacyAuth } from '@/context/LegacyAuthContext';
 import KpiCard from '@/components/legacy/KpiCard';
@@ -50,35 +49,54 @@ const formatInt = (n: number) => n.toLocaleString('es-MX');
 const formatTon = (n: number) =>
   n.toLocaleString('es-MX', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
+type PhaseKey = 'overview' | 'modulos';
+type PhaseStatus = 'pending' | 'loading' | 'done' | 'error';
+interface PhaseDef { key: PhaseKey; roman: string; label: string; icon: string }
+const PHASES: PhaseDef[] = [
+  { key: 'overview', roman: 'I',  label: 'Resumen global',       icon: 'insights' },
+  { key: 'modulos',  roman: 'II', label: 'Indicadores por módulo', icon: 'apartment' },
+];
+
 export default function LegacyDashboardPage() {
   const { user, token } = useLegacyAuth();
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [modulos, setModulos]   = useState<ModuloOverview[] | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [phaseStatus, setPhaseStatus] = useState<Record<PhaseKey, PhaseStatus>>({
+    'overview': 'pending', 'modulos': 'pending',
+  });
+  const [phaseError, setPhaseError] = useState<Partial<Record<PhaseKey, string>>>({});
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!token) return;
-    const load = async () => {
-      setLoading(true);
-      setError('');
+    const h = { Authorization: `Bearer ${token}` };
+    setError('');
+    setPhaseStatus({ 'overview': 'loading', 'modulos': 'loading' });
+
+    const runPhase = async <T,>(key: PhaseKey, url: string, setter: (d: T) => void) => {
       try {
-        const h = { Authorization: `Bearer ${token}` };
-        const [ovRes, modRes] = await Promise.all([
-          fetch(`${API_BASE}/legacy/dashboard/overview`,   { headers: h }),
-          fetch(`${API_BASE}/legacy/dashboard/por-modulo`, { headers: h }),
-        ]);
-        if (!ovRes.ok) throw new Error(`HTTP ${ovRes.status}`);
-        setOverview((await ovRes.json()) as DashboardOverview);
-        if (modRes.ok) setModulos((await modRes.json()) as ModuloOverview[]);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Error al cargar el dashboard');
-      } finally {
-        setLoading(false);
+        const res = await fetch(url, { headers: h });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        setter((await res.json()) as T);
+        setPhaseStatus((p) => ({ ...p, [key]: 'done' }));
+      } catch (e) {
+        setPhaseStatus((p) => ({ ...p, [key]: 'error' }));
+        setPhaseError((p) => ({ ...p, [key]: e instanceof Error ? e.message : 'Error' }));
+        if (key === 'overview') setError(e instanceof Error ? e.message : 'Error');
       }
     };
-    void load();
+
+    void Promise.all([
+      runPhase<DashboardOverview>('overview',  `${API_BASE}/legacy/dashboard/overview`,    setOverview),
+      runPhase<ModuloOverview[]>('modulos',    `${API_BASE}/legacy/dashboard/por-modulo`,  setModulos),
+    ]);
   }, [token]);
+
+  const phasesDone  = Object.values(phaseStatus).filter((s) => s === 'done').length;
+  const phasesTotal = PHASES.length;
+  const progressPct = (phasesDone / phasesTotal) * 100;
+  const anyLoading  = Object.values(phaseStatus).some((s) => s === 'loading' || s === 'pending');
+  const overviewLoading = phaseStatus.overview === 'loading' || phaseStatus.overview === 'pending';
 
   return (
     <div className="p-6 sm:p-8 space-y-8">
@@ -104,24 +122,58 @@ export default function LegacyDashboardPage() {
         </div>
       </div>
 
-      {/* KPIs */}
-      {loading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
+      {/* Loader por fase */}
+      {anyLoading && (
+        <section className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5">
+          <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 mb-3">
+            <span className="font-semibold uppercase tracking-wider">Cargando dashboard</span>
+            <span className="tabular-nums">{phasesDone} / {phasesTotal} fases</span>
+          </div>
+          <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden mb-4">
             <div
-              key={i}
-              className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 h-[100px] animate-pulse"
+              className="h-full bg-gradient-to-r from-amber-400 to-emerald-500 transition-[width] duration-500"
+              style={{ width: `${progressPct}%` }}
             />
-          ))}
-        </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {PHASES.map((p) => {
+              const st = phaseStatus[p.key];
+              const bg =
+                st === 'done'    ? 'bg-emerald-100 dark:bg-emerald-900/30' :
+                st === 'loading' ? 'bg-amber-100 dark:bg-amber-900/30' :
+                st === 'error'   ? 'bg-red-100 dark:bg-red-900/30' :
+                                   'bg-slate-100 dark:bg-slate-800';
+              const fg =
+                st === 'done'    ? 'text-emerald-700 dark:text-emerald-400' :
+                st === 'loading' ? 'text-amber-700 dark:text-amber-400' :
+                st === 'error'   ? 'text-red-700 dark:text-red-400' :
+                                   'text-slate-400 dark:text-slate-500';
+              return (
+                <div key={p.key} className={`rounded-lg p-3 ${bg} flex items-center gap-3`} title={phaseError[p.key] ?? ''}>
+                  <div className={fg}>
+                    {st === 'loading' ? (
+                      <span className="inline-block size-6 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+                    ) : (
+                      <Icon name={st === 'done' ? 'check_circle' : st === 'error' ? 'error' : p.icon} className="text-2xl" />
+                    )}
+                  </div>
+                  <div className="flex flex-col">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${fg}`}>{p.roman}</span>
+                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{p.label}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
-      {error && !loading && (
+      {error && !overviewLoading && !overview && (
         <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 flex items-center gap-2">
           <Icon name="error" className="text-red-500 text-lg shrink-0" />
           No se pudo cargar el dashboard: {error}
         </div>
       )}
-      {overview && !loading && (
+      {overview && !overviewLoading && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <KpiCard
@@ -295,59 +347,6 @@ export default function LegacyDashboardPage() {
         </section>
       )}
 
-      {/* Accesos rápidos */}
-      <div>
-        <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-3">
-          Accesos rápidos
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Link
-            to="/legacy/reportes/concentrado-en-linea"
-            className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 flex items-start gap-3 hover:border-amber-400 dark:hover:border-amber-600 transition-colors"
-          >
-            <div className="size-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-              <Icon name="summarize" className="text-amber-700 dark:text-amber-400 text-xl" />
-            </div>
-            <div>
-              <p className="font-semibold text-slate-900 dark:text-slate-100">Movilización en línea</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Concentrado por módulo, mercado y variedad
-              </p>
-            </div>
-          </Link>
-          <Link
-            to="/legacy/reportes/concentrado-en-linea-semanal"
-            className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 flex items-start gap-3 hover:border-amber-400 dark:hover:border-amber-600 transition-colors"
-          >
-            <div className="size-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-              <Icon name="date_range" className="text-amber-700 dark:text-amber-400 text-xl" />
-            </div>
-            <div>
-              <p className="font-semibold text-slate-900 dark:text-slate-100">Movilización semanal</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Mismo concentrado filtrado por semana
-              </p>
-            </div>
-          </Link>
-          {[
-            { icon: 'edit_note', title: 'Correcciones', desc: 'Próximamente' },
-            { icon: 'history', title: 'Bitácora', desc: 'Próximamente' },
-          ].map((card) => (
-            <div
-              key={card.title}
-              className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 flex items-start gap-3"
-            >
-              <div className="size-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                <Icon name={card.icon} className="text-amber-700 dark:text-amber-400 text-xl" />
-              </div>
-              <div>
-                <p className="font-semibold text-slate-900 dark:text-slate-100">{card.title}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{card.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
