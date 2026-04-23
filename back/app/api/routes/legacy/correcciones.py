@@ -466,7 +466,7 @@ def actualizar_revision(
     user_clave, user_nick = _resolver_legacy_user(session, claims)
     ident_before = session.execute(
         text("""
-            SELECT id_identificacion, folio_revision, tipo_especie,
+            SELECT folio_revision, tipo_especie,
                    hembras_silvestre, machos_silvestre, hembras_esteril, machos_esteril
               FROM identificacion
              WHERE folio_revision = :folio
@@ -525,34 +525,52 @@ def actualizar_revision(
         cambios_identificacion = {"op": "insert", "despues": ident.model_dump(), "id": res.lastrowid}
 
     elif se_mantiene_en_2 and body.identificacion is not None:
-        # UPDATE la primera fila existente (MVP single-species); si no existe, INSERT
+        # DELETE + INSERT en lugar de UPDATE por id_identificacion: esa columna
+        # solo existe en 5 de 8 BDs legacy (falta en Chiapas, Guerrero, Oaxaca).
+        # Con DELETE por folio_revision (que SÍ existe en todas) + INSERT fresco,
+        # el flujo funciona idéntico en todas las BDs. La auditoría guarda
+        # el snapshot previo completo.
         if ident_before_list:
             first = ident_before_list[0]
             ident = body.identificacion
             session.execute(
+                text("DELETE FROM identificacion WHERE folio_revision = :folio"),
+                {"folio": folio},
+            )
+            ahora_upd = datetime.now()
+            folio_tecnico_int = _to_int_or_none(folio_tecnico_ruta)
+            res = session.execute(
                 text("""
-                    UPDATE identificacion
-                       SET tipo_especie      = :tipo_especie,
-                           hembras_silvestre = :hs,
-                           machos_silvestre  = :ms,
-                           hembras_esteril   = :he,
-                           machos_esteril    = :me
-                     WHERE id_identificacion = :id
+                    INSERT INTO identificacion
+                      (folio_revision, no_trampa, no_semana, tipo_especie,
+                       hembras_silvestre, machos_silvestre, hembras_esteril, machos_esteril,
+                       folio_tecnico, fecha, hora, usuario)
+                    VALUES
+                      (:folio, :no_trampa, :no_semana, :tipo_especie,
+                       :hs, :ms, :he, :me,
+                       :ft, :fecha, :hora, :usuario)
                 """),
                 {
+                    "folio": folio,
+                    "no_trampa": before_d["no_trampa"],
+                    "no_semana": before_d["no_semana"],
                     "tipo_especie": ident.tipo_especie,
                     "hs": ident.hembras_silvestre,
                     "ms": ident.machos_silvestre,
                     "he": ident.hembras_esteril,
                     "me": ident.machos_esteril,
-                    "id": first["id_identificacion"],
+                    "ft": folio_tecnico_int,
+                    "fecha": ahora_upd.date(),
+                    "hora": ahora_upd.time().replace(microsecond=0),
+                    "usuario": (user_nick or "v3-admin")[:20],
                 },
             )
             session.commit()
             cambios_identificacion = {
                 "op": "update",
-                "antes": {k: first[k] for k in ("tipo_especie", "hembras_silvestre", "machos_silvestre", "hembras_esteril", "machos_esteril")},
+                "antes": {k: first.get(k) for k in ("tipo_especie", "hembras_silvestre", "machos_silvestre", "hembras_esteril", "machos_esteril")},
                 "despues": ident.model_dump(),
+                "id": res.lastrowid,
             }
         else:
             ident = body.identificacion
@@ -630,7 +648,6 @@ def actualizar_revision(
                    hembras_esteril, machos_esteril
               FROM identificacion
              WHERE folio_revision = :folio
-             ORDER BY id_identificacion ASC
         """),
         {"folio": folio},
     ).mappings().all()
@@ -1004,10 +1021,11 @@ def eliminar_trampa(
 
     ident_deleted = 0
     if rev_folios:
-        # snapshot de identificacion para audit
+        # snapshot de identificacion para audit (sin id_identificacion — no existe
+        # en todas las BDs; folio_revision es suficiente para identificar la fila)
         ident_snap = session.execute(
             text("""
-                SELECT id_identificacion, folio_revision, tipo_especie,
+                SELECT folio_revision, tipo_especie,
                        hembras_silvestre, machos_silvestre, hembras_esteril, machos_esteril
                   FROM identificacion WHERE folio_revision IN :folios
             """).bindparams(bindparam("folios", expanding=True)),

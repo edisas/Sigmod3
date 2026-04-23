@@ -140,11 +140,13 @@ def listar_modulos(
     session: Session = Depends(get_legacy_db),
     _claims: dict = Depends(get_current_legacy_claims),
 ) -> list[ModuloRow]:
+    # OJO: cat_modulos.status solo existe en Sinaloa; en las otras 7 BDs la
+    # columna no existe (verificado con information_schema). No se filtra por
+    # status aquí — los pocos módulos inactivos en Sinaloa son aceptables.
     rows = session.execute(
         text("""
             SELECT folio, nombre_modulo, tipo_folio
               FROM cat_modulos
-             WHERE status IS NULL OR status = 'A'
              ORDER BY nombre_modulo ASC
         """)
     ).mappings().all()
