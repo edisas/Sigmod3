@@ -41,6 +41,7 @@ import CorreccionRevisionesTrampasPage from '@/pages/legacy/CorreccionRevisiones
 import CorreccionTrampasPage from '@/pages/legacy/CorreccionTrampasPage';
 import DashboardTrampeosPage from '@/pages/legacy/DashboardTrampeosPage';
 import DashboardMuestreoPage from '@/pages/legacy/DashboardMuestreoPage';
+import CorreccionMuestreosPage from '@/pages/legacy/CorreccionMuestreosPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 import ForbiddenPage from '@/pages/ForbiddenPage';
 import ServerErrorPage from '@/pages/ServerErrorPage';
@@ -78,6 +79,7 @@ export default function App() {
               <Route path="/legacy/correcciones/trampas" element={<CorreccionTrampasPage />} />
               <Route path="/legacy/dashboard-trampeos" element={<DashboardTrampeosPage />} />
               <Route path="/legacy/dashboard-muestreo" element={<DashboardMuestreoPage />} />
+              <Route path="/legacy/correcciones/muestreos" element={<CorreccionMuestreosPage />} />
             </Route>
 
             {/* Protected Admin Routes */}
