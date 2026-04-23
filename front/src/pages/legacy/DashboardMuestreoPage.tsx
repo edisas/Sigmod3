@@ -428,15 +428,30 @@ function ChartStackedVariedad({ titulo, icono, loading, data, semanas, variedade
         <p className="text-sm text-slate-500 dark:text-slate-400">Sin datos en este rango.</p>
       ) : (
         <div className="animate-fade-in">
-          {/* bars container */}
-          <div className="flex items-end gap-2 h-48 border-b border-slate-200 dark:border-slate-700 mb-2 overflow-x-auto">
+          {/* bars container — default align-items: stretch hace que cada columna
+              herede la altura del contenedor (h-56). flex-1 interno puede entonces
+              dar altura real a la barra (antes colapsaba por items-end). */}
+          <div className="flex gap-1 h-56 border-b border-slate-200 dark:border-slate-700 mb-2 overflow-x-auto relative">
+            {/* eje Y con 5 marcas */}
+            <div className="absolute inset-0 pointer-events-none">
+              {[0, 0.25, 0.5, 0.75, 1].map((t) => (
+                <div key={t} className="absolute left-0 right-0 border-t border-dashed border-slate-100 dark:border-slate-800 flex items-center" style={{ top: `${t * 100}%` }}>
+                  <span className="text-[9px] text-slate-400 tabular-nums ml-1 -translate-y-2">{formato(Math.round(maxTotal * (1 - t)))}</span>
+                </div>
+              ))}
+            </div>
             {semanas.map((s) => {
               const total = totalBySem[s.sem_folio] ?? 0;
-              const heightPct = (total / maxTotal) * 100;
+              // mínimo 2% si hay algún valor para que sea visible
+              const heightPct = total > 0 ? Math.max((total / maxTotal) * 100, 2) : 0;
               return (
-                <div key={s.sem_folio} className="flex flex-col items-center min-w-[36px] flex-1">
-                  <div className="flex-1 flex items-end w-full">
-                    <div className="w-full flex flex-col-reverse overflow-hidden rounded-t" style={{ height: `${heightPct}%` }} title={`${s.label} · total ${formato(total)}`}>
+                <div key={s.sem_folio} className="flex flex-col min-w-[40px] flex-1 relative z-10">
+                  <div className="flex-1 flex items-end w-full px-[2px]">
+                    <div
+                      className="w-full flex flex-col-reverse overflow-hidden rounded-t transition-[height] duration-500"
+                      style={{ height: `${heightPct}%` }}
+                      title={`${s.label} · total ${formato(total)}`}
+                    >
                       {topVars.map((v) => {
                         const val = matriz.get(`${s.sem_folio}:${v.folio}`) ?? 0;
                         const pct = total > 0 ? (val / total) * 100 : 0;
@@ -445,10 +460,17 @@ function ChartStackedVariedad({ titulo, icono, loading, data, semanas, variedade
                       })}
                     </div>
                   </div>
-                  <span className="text-[10px] text-slate-500 mt-1 whitespace-nowrap">{s.label}</span>
                 </div>
               );
             })}
+          </div>
+          {/* etiquetas X */}
+          <div className="flex gap-1 overflow-x-auto">
+            {semanas.map((s) => (
+              <div key={s.sem_folio} className="min-w-[40px] flex-1 text-center">
+                <span className="text-[10px] text-slate-500 whitespace-nowrap">{s.label}</span>
+              </div>
+            ))}
           </div>
           {/* leyenda */}
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-600 dark:text-slate-400 mt-3">

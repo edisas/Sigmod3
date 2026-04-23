@@ -7,7 +7,7 @@ const STATUS_REVISADA_CON_CAPTURA = 2;
 
 // ───────────────────────── Types ─────────────────────────
 
-interface PfaRow     { folio: number; nombre: string; inicial: string | null; cedula: string | null }
+interface PfaRow     { folio: number; nombre: string; inicial: string | null; rutas_count: number }
 interface RutaPfaRow { folio: number; nombre_ruta: string | null; inicial_ruta: string | null; modulo_nombre: string | null }
 interface SemanaRow  { no_semana: number; periodo: number | null; semana_label: string; revisiones: number }
 
@@ -88,7 +88,7 @@ export default function CorreccionRevisionesTrampasPage() {
       try {
         const h = { Authorization: `Bearer ${token}` };
         const [pfasRes, catRes] = await Promise.all([
-          fetch(`${API_BASE}/legacy/catalogos/pfas`, { headers: h }),
+          fetch(`${API_BASE}/legacy/correcciones/pfas-con-rutas`, { headers: h }),
           fetch(`${API_BASE}/legacy/correcciones/catalogos`, { headers: h }),
         ]);
         if (pfasRes.ok) setPfas(await pfasRes.json());
@@ -324,7 +324,7 @@ export default function CorreccionRevisionesTrampasPage() {
               <option value="">— Selecciona un PFA —</option>
               {pfas.map((p) => (
                 <option key={p.folio} value={p.folio}>
-                  {p.inicial ? `${p.inicial} · ` : ''}{p.nombre}
+                  {p.inicial ? `${p.inicial} · ` : ''}{p.nombre} — {p.rutas_count} ruta{p.rutas_count !== 1 ? 's' : ''}
                 </option>
               ))}
             </select>
