@@ -409,44 +409,78 @@ def semanas_con_tmimf_o(
 ) -> list[SemanaTmimfRow]:
     # TMIMFs 'O' activas de la ruta (via cat_rutas.folio y tmimf.folio_ruta si existe,
     # o via huertos de la ruta)
-    rows = session.execute(
+    # Query 1: pares (semana, huerto, folio_tmimf) de TMIMF 'O' para la ruta.
+    # Separamos en Python para evitar el EXISTS correlacionado que tardaba 3s.
+    tmimf_rows = session.execute(
         text("""
             SELECT CAST(NULLIF(t.semana,'') AS UNSIGNED) AS no_semana,
-                   COUNT(*) AS tmimfs,
-                   COUNT(DISTINCT CASE
-                       WHEN EXISTS (
-                           SELECT 1 FROM muestreo_de_frutos mf
-                            WHERE mf.numeroinscripcion = t.numeroinscripcion
-                              AND mf.no_semana = CAST(NULLIF(t.semana,'') AS UNSIGNED)
-                       ) THEN t.folio_tmimf END) AS muestreos_registrados
+                   t.numeroinscripcion,
+                   t.folio_tmimf
               FROM tmimf t
               JOIN sv01_sv02 sv ON sv.numeroinscripcion = t.numeroinscripcion
              WHERE sv.folio_ruta = :ruta
                AND t.tipo_tarjeta = 'O' AND t.status = 'A'
                AND t.semana IS NOT NULL AND t.semana <> ''
-             GROUP BY no_semana
-             ORDER BY no_semana DESC
-             LIMIT 52
         """),
         {"ruta": ruta},
     ).mappings().all()
+    if not tmimf_rows:
+        return []
+
+    tmimfs_por_sem: dict[int, set[str]] = {}
+    inscripciones_por_sem: dict[int, set[str]] = {}
+    for r in tmimf_rows:
+        sem = int(r["no_semana"] or 0)
+        tmimfs_por_sem.setdefault(sem, set()).add(str(r["folio_tmimf"]))
+        inscripciones_por_sem.setdefault(sem, set()).add(str(r["numeroinscripcion"]))
+
+    # Query 2: muestreos por huerto+semana — una sola pasada limitada al rango
+    sem_min = min(tmimfs_por_sem.keys())
+    sem_max = max(tmimfs_por_sem.keys())
+    muestreo_rows = session.execute(
+        text("""
+            SELECT DISTINCT mf.numeroinscripcion, mf.no_semana
+              FROM muestreo_de_frutos mf
+              JOIN sv01_sv02 sv ON sv.numeroinscripcion = mf.numeroinscripcion
+             WHERE sv.folio_ruta = :ruta
+               AND mf.no_semana BETWEEN :smin AND :smax
+        """),
+        {"ruta": ruta, "smin": sem_min, "smax": sem_max},
+    ).mappings().all()
+    muestreos_por_sem: dict[int, set[str]] = {}
+    for r in muestreo_rows:
+        muestreos_por_sem.setdefault(int(r["no_semana"] or 0), set()).add(str(r["numeroinscripcion"]))
+
+    # Query 3: labels de todas las semanas involucradas en una sola pasada
+    folios = list(tmimfs_por_sem.keys())
+    from sqlalchemy import bindparam
+    labels_rows = session.execute(
+        text("SELECT folio, no_semana, periodo FROM semanas WHERE folio IN :folios")
+        .bindparams(bindparam("folios", expanding=True)),
+        {"folios": folios},
+    ).mappings().all()
+    labels_map = {int(r["folio"]): (int(r["no_semana"]), int(r["periodo"])) for r in labels_rows}
+
     out: list[SemanaTmimfRow] = []
-    for r in rows:
-        folio = int(r["no_semana"] or 0)
-        sem_info = session.execute(
-            text("SELECT no_semana, periodo FROM semanas WHERE folio = :f"),
-            {"f": folio},
-        ).mappings().first()
-        if sem_info:
-            label = f"{int(sem_info['no_semana'])} - {int(sem_info['periodo'])}"
-            periodo = int(sem_info["periodo"])
+    for sem in sorted(tmimfs_por_sem.keys(), reverse=True)[:52]:
+        ins_con_muestreo = muestreos_por_sem.get(sem, set())
+        # contar folio_tmimf cuyo numeroinscripcion tiene muestreo
+        folios_con_muestreo = {
+            r["folio_tmimf"]
+            for r in tmimf_rows
+            if int(r["no_semana"] or 0) == sem and str(r["numeroinscripcion"]) in ins_con_muestreo
+        }
+        if sem in labels_map:
+            ns, per = labels_map[sem]
+            label = f"{ns} - {per}"
+            periodo = per
         else:
-            label = f"sem {folio}"
+            label = f"sem {sem}"
             periodo = None
         out.append(SemanaTmimfRow(
-            no_semana=folio, periodo=periodo, semana_label=label,
-            tmimfs=int(r["tmimfs"] or 0),
-            muestreos_registrados=int(r["muestreos_registrados"] or 0),
+            no_semana=sem, periodo=periodo, semana_label=label,
+            tmimfs=len(tmimfs_por_sem[sem]),
+            muestreos_registrados=len(folios_con_muestreo),
         ))
     return out
 

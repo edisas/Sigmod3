@@ -324,6 +324,12 @@ export default function CorreccionMuestreosPage() {
                 </option>
               ))}
             </select>
+            {rutaId !== null && semanas.length === 0 && (
+              <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1 flex items-start gap-1">
+                <Icon name="info" className="text-sm shrink-0 mt-0.5" />
+                <span>Esta ruta no tiene TMIMFs 'O' emitidas. Selecciona otra ruta.</span>
+              </p>
+            )}
           </div>
         </div>
       </section>
