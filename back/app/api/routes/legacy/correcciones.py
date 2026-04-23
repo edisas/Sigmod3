@@ -33,7 +33,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from app.api.routes.legacy.dependencies import get_current_legacy_claims, get_legacy_db
@@ -204,7 +204,8 @@ def listar_revisiones(
                        hembras_esteril, machos_esteril
                   FROM identificacion
                  WHERE folio_revision IN :folios
-            """).bindparams(folios=folios),
+            """).bindparams(bindparam("folios", expanding=True)),
+            {"folios": folios},
         ).mappings().all()
         for ir in ident_rows:
             ident_map.setdefault(int(ir["folio_revision"]), []).append(dict(ir))
