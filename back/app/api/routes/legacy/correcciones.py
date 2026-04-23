@@ -55,7 +55,13 @@ class RutaPfaRow(BaseModel):
 
 
 class SemanaRutaRow(BaseModel):
+    # no_semana aquí es el FOLIO de la tabla semanas — lo guardamos así porque
+    # es el identificador interno que usan trampas_revision.no_semana y
+    # tmimf.semana. `semana_label` ya trae el texto "{no_semana_año} - {periodo}"
+    # para mostrar al usuario (formato del PHP original).
     no_semana: int
+    periodo: int | None
+    semana_label: str
     revisiones: int
 
 
@@ -150,17 +156,36 @@ def semanas_por_ruta(
 ) -> list[SemanaRutaRow]:
     rows = session.execute(
         text("""
-            SELECT tr.no_semana, COUNT(*) AS revisiones
+            SELECT tr.no_semana       AS folio_semana,
+                   s.no_semana        AS no_semana_anio,
+                   s.periodo          AS periodo,
+                   COUNT(*)           AS revisiones
               FROM trampas_revision tr
               JOIN trampas t ON t.no_trampa = tr.no_trampa
+              LEFT JOIN semanas s ON s.folio = tr.no_semana
              WHERE t.folio_ruta = :ruta
-             GROUP BY tr.no_semana
+             GROUP BY tr.no_semana, s.no_semana, s.periodo
              ORDER BY tr.no_semana DESC
              LIMIT 52
         """),
         {"ruta": ruta},
     ).mappings().all()
-    return [SemanaRutaRow(**dict(r)) for r in rows]
+    out: list[SemanaRutaRow] = []
+    for r in rows:
+        folio  = int(r["folio_semana"])
+        nsa    = r["no_semana_anio"]
+        per    = r["periodo"]
+        if nsa is not None and per is not None:
+            label = f"{int(nsa)} - {int(per)}"
+        else:
+            label = f"sem {folio}"
+        out.append(SemanaRutaRow(
+            no_semana=folio,
+            periodo=int(per) if per is not None else None,
+            semana_label=label,
+            revisiones=int(r["revisiones"] or 0),
+        ))
+    return out
 
 
 @router.get("/revisiones", response_model=list[RevisionRow])

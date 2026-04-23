@@ -9,7 +9,7 @@ const STATUS_REVISADA_CON_CAPTURA = 2;
 
 interface PfaRow     { folio: number; nombre: string; inicial: string | null; cedula: string | null }
 interface RutaPfaRow { folio: number; nombre_ruta: string | null; inicial_ruta: string | null; modulo_nombre: string | null }
-interface SemanaRow  { no_semana: number; revisiones: number }
+interface SemanaRow  { no_semana: number; periodo: number | null; semana_label: string; revisiones: number }
 
 interface CatalogoItem { folio: number; nombre: string }
 interface Catalogos    { status_revision: CatalogoItem[]; productos: CatalogoItem[]; especies: CatalogoItem[] }
@@ -370,7 +370,7 @@ export default function CorreccionRevisionesTrampasPage() {
               <option value="">— Selecciona una semana —</option>
               {semanas.map((s) => (
                 <option key={s.no_semana} value={s.no_semana}>
-                  Semana {s.no_semana} · {s.revisiones} revisiones
+                  {s.semana_label} · {s.revisiones} revisiones
                 </option>
               ))}
             </select>
@@ -384,7 +384,7 @@ export default function CorreccionRevisionesTrampasPage() {
           <header className="px-5 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 flex items-center gap-3">
             <Icon name="checklist" className="text-amber-700 dark:text-amber-400 text-lg" />
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
-              Semana {semana} · {semanaDetalle?.revisiones ?? revisiones.length} revisiones
+              Semana {semanaDetalle?.semana_label ?? semana} · {semanaDetalle?.revisiones ?? revisiones.length} revisiones
             </h2>
             {cargandoRevs && (
               <span className="ml-auto inline-flex items-center gap-1 text-xs text-slate-500">
