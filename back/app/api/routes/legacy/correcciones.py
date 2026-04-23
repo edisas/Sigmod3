@@ -780,7 +780,7 @@ def trampas_por_ruta(
                    r.inicial_ruta         AS ruta_inicial,
                    t.tipo_trampa, t.fecha_ultima_revision, t.fecha_colocacion, t.status
               FROM trampas t
-              LEFT JOIN sv01_sv02 sv ON TRIM(sv.numeroinscripcion) = TRIM(t.numeroinscripcion)
+              LEFT JOIN sv01_sv02 sv ON TRIM(sv.numeroinscripcion) COLLATE latin1_general_ci = TRIM(t.numeroinscripcion)
               LEFT JOIN cat_rutas r  ON r.folio = t.folio_ruta
              WHERE t.folio_ruta = :ruta
              ORDER BY t.no_trampa ASC
@@ -949,7 +949,7 @@ def actualizar_trampa(
                    r.inicial_ruta   AS ruta_inicial,
                    t.tipo_trampa, t.fecha_ultima_revision, t.fecha_colocacion, t.status
               FROM trampas t
-              LEFT JOIN sv01_sv02 sv ON TRIM(sv.numeroinscripcion) = TRIM(t.numeroinscripcion)
+              LEFT JOIN sv01_sv02 sv ON TRIM(sv.numeroinscripcion) COLLATE latin1_general_ci = TRIM(t.numeroinscripcion)
               LEFT JOIN cat_rutas  r ON r.folio = t.folio_ruta
              WHERE t.folio = :f
         """),

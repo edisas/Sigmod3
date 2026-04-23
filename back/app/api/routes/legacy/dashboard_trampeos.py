@@ -329,7 +329,7 @@ def top_pfas(
                    COUNT(DISTINCT i.no_semana) AS semanas_cap
               FROM identificacion i
               JOIN trampas tp  ON tp.no_trampa = i.no_trampa
-              JOIN sv01_sv02 sv ON TRIM(sv.numeroinscripcion) = TRIM(tp.numeroinscripcion)
+              JOIN sv01_sv02 sv ON TRIM(sv.numeroinscripcion) COLLATE latin1_general_ci = TRIM(tp.numeroinscripcion)
               JOIN cat_rutas r ON r.folio = sv.folio_ruta
               LEFT JOIN cat_funcionarios f ON f.folio = r.clave_pfa
              WHERE i.no_semana BETWEEN :fmin AND :fmax
