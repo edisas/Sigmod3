@@ -93,6 +93,8 @@ class TmimfDetalle(BaseModel):
     numeroinscripcion: str
     nombre_huerto: str | None
     no_semana: int
+    semana_fecha_inicio: date | None
+    semana_fecha_final: date | None
     mercado_destino: int | None
     kg_fruta_muestreada: float
     larvas_por_kg_fruta: int
@@ -167,6 +169,30 @@ def _resolver_legacy_user(session: Session, claims: dict) -> tuple[int | None, s
         {"c": clave},
     ).mappings().first()
     return (int(row["clave"]), str(row["nick"] or "")) if row else (clave, None)
+
+
+def _fechas_semana(session: Session, no_semana_folio: int) -> tuple[date | None, date | None]:
+    """Retorna (fecha_inicio, fecha_final) de la semana por folio, o (None, None)."""
+    row = session.execute(
+        text("SELECT fecha_inicio, fecha_final FROM semanas WHERE folio = :f"),
+        {"f": no_semana_folio},
+    ).mappings().first()
+    if not row:
+        return None, None
+    return row["fecha_inicio"], row["fecha_final"]
+
+
+def _validar_fecha_en_semana(fecha_muestreo: date, fi: date | None, ff: date | None, no_semana: int) -> None:
+    if fi is None or ff is None:
+        return  # sin rango conocido, no bloqueamos
+    if fecha_muestreo < fi or fecha_muestreo > ff:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"fecha_muestreo {fecha_muestreo.isoformat()} está fuera de la semana "
+                f"{no_semana} ({fi.isoformat()} a {ff.isoformat()}). Ajusta la fecha."
+            ),
+        )
 
 
 def _estado_clave_y_db(claims: dict) -> tuple[str, str]:
@@ -250,12 +276,15 @@ def _cargar_tmimf_detalle(session: Session, folio_tmimf: str, clave_mov: str) ->
             identificaciones=[dict(x) for x in idents],
         ))
 
+    fi, ff = _fechas_semana(session, int(row["no_semana"] or 0))
     return TmimfDetalle(
         folio_tmimf=str(row["folio_tmimf"]),
         clave_movilizacion=str(row["clave_movilizacion"]),
         numeroinscripcion=str(row["numeroinscripcion"]),
         nombre_huerto=row["nombre_huerto"],
         no_semana=int(row["no_semana"] or 0),
+        semana_fecha_inicio=fi,
+        semana_fecha_final=ff,
         mercado_destino=row["mercado_destino"],
         kg_fruta_muestreada=float(row["kg_fruta_muestreada"] or 0),
         larvas_por_kg_fruta=int(row["larvas_por_kg_fruta"] or 0),
@@ -528,7 +557,11 @@ def crear_muestreo(
     if not tmimf:
         raise HTTPException(status_code=404, detail="TMIMF 'O' activa no encontrada")
 
-    # 2. Si frutos_infestados > 0 requiere identificación
+    # 2a. Validar fecha_muestreo dentro del rango de la semana de la TMIMF
+    fi, ff = _fechas_semana(session, int(tmimf["no_semana"] or 0))
+    _validar_fecha_en_semana(body.fecha_muestreo, fi, ff, int(tmimf["no_semana"] or 0))
+
+    # 2b. Si frutos_infestados > 0 requiere identificación
     if body.frutos_infestados > 0 and body.identificacion is None:
         raise HTTPException(
             status_code=400,
@@ -739,6 +772,11 @@ def actualizar_muestreo(
     ).mappings().first()
     if not tmi:
         raise HTTPException(status_code=404, detail="TMIMF 'O' asociada no existe o está inactiva")
+
+    # Validar fecha_muestreo si el user la está cambiando
+    if body.fecha_muestreo is not None:
+        fi, ff = _fechas_semana(session, int(before_d["no_semana"] or 0))
+        _validar_fecha_en_semana(body.fecha_muestreo, fi, ff, int(before_d["no_semana"] or 0))
 
     cambios = {k: v for k, v in body.model_dump(exclude={"identificacion", "confirmar_cambio_mercado"}).items() if v is not None}
     if body.frutos_infestados is not None and body.frutos_infestados > 0 and body.identificacion is None:

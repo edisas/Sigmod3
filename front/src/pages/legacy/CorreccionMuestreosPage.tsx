@@ -37,7 +37,10 @@ interface MuestreoRow {
 interface TmimfDetalle {
   folio_tmimf: string; clave_movilizacion: string;
   numeroinscripcion: string; nombre_huerto: string | null;
-  no_semana: number; mercado_destino: number | null;
+  no_semana: number;
+  semana_fecha_inicio: string | null;
+  semana_fecha_final: string | null;
+  mercado_destino: number | null;
   kg_fruta_muestreada: number; larvas_por_kg_fruta: number;
   variedades_disponibles: { folio: number; descripcion: string }[];
   muestreos: MuestreoRow[];
@@ -399,6 +402,7 @@ export default function CorreccionMuestreosPage() {
                               onGuardar={() => void postMuestreo(false)}
                               onBorrar={deleteMuestreo}
                               guardando={guardando}
+                              onValidationError={(msg) => setToast({ kind: 'err', text: msg })}
                             />
                           </td>
                         </tr>
@@ -471,9 +475,10 @@ interface ExpandedProps {
   onGuardar: () => void;
   onBorrar: (m: MuestreoRow) => void;
   guardando: boolean;
+  onValidationError: (msg: string) => void;
 }
 
-function ExpandedPanel({ cargando, detalle, catalogos, draft, setDraft, onGuardar, onBorrar, guardando }: ExpandedProps) {
+function ExpandedPanel({ cargando, detalle, catalogos, draft, setDraft, onGuardar, onBorrar, guardando, onValidationError }: ExpandedProps) {
   if (cargando) {
     return <div className="p-6 text-center text-sm text-slate-500">Cargando detalle...</div>;
   }
@@ -561,9 +566,12 @@ function ExpandedPanel({ cargando, detalle, catalogos, draft, setDraft, onGuarda
           draft={draft} setDraft={setDraft}
           catalogos={catalogos}
           variedadesHuerto={detalle.variedades_disponibles}
+          semanaInicio={detalle.semana_fecha_inicio}
+          semanaFin={detalle.semana_fecha_final}
           onCancel={() => setDraft(null)}
           onGuardar={onGuardar}
           guardando={guardando}
+          onValidationError={onValidationError}
         />
       )}
     </div>
@@ -577,13 +585,32 @@ interface DraftFormProps {
   setDraft: (d: DraftMuestreo) => void;
   catalogos: Catalogos;
   variedadesHuerto: { folio: number; descripcion: string }[];
+  semanaInicio: string | null;
+  semanaFin: string | null;
   onCancel: () => void;
   onGuardar: () => void;
   guardando: boolean;
+  onValidationError: (msg: string) => void;
 }
 
-function DraftForm({ draft, setDraft, catalogos, variedadesHuerto, onCancel, onGuardar, guardando }: DraftFormProps) {
+function DraftForm({ draft, setDraft, catalogos, variedadesHuerto, semanaInicio, semanaFin, onCancel, onGuardar, guardando, onValidationError }: DraftFormProps) {
   const variedadesLista = variedadesHuerto.length > 0 ? variedadesHuerto : catalogos.variedades_mango;
+  const fechaFueraDeSemana =
+    !!draft.fecha_muestreo && !!semanaInicio && !!semanaFin &&
+    (draft.fecha_muestreo < semanaInicio || draft.fecha_muestreo > semanaFin);
+
+  const handleGuardar = () => {
+    if (!draft.fecha_muestreo) {
+      onValidationError('Captura la fecha de muestreo.');
+      return;
+    }
+    if (fechaFueraDeSemana) {
+      onValidationError(`La fecha ${draft.fecha_muestreo} está fuera de la semana de la TMIMF (${semanaInicio} a ${semanaFin}).`);
+      return;
+    }
+    onGuardar();
+  };
+
   return (
     <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 p-4 space-y-4">
       <div className="flex items-center justify-between">
@@ -595,8 +622,22 @@ function DraftForm({ draft, setDraft, catalogos, variedadesHuerto, onCancel, onG
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
         <Field label="Fecha muestreo">
-          <input type="date" value={draft.fecha_muestreo} onChange={(e) => setDraft({ ...draft, fecha_muestreo: e.target.value })}
-            className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" />
+          <input
+            type="date"
+            value={draft.fecha_muestreo}
+            min={semanaInicio ?? undefined}
+            max={semanaFin ?? undefined}
+            onChange={(e) => setDraft({ ...draft, fecha_muestreo: e.target.value })}
+            className={`w-full px-2 py-1 rounded border bg-white dark:bg-slate-800 ${
+              fechaFueraDeSemana ? 'border-rose-400 dark:border-rose-600' : 'border-slate-200 dark:border-slate-700'
+            }`}
+          />
+          {semanaInicio && semanaFin && (
+            <span className={`text-[10px] mt-0.5 ${fechaFueraDeSemana ? 'text-rose-600' : 'text-slate-500'}`}>
+              {fechaFueraDeSemana ? '⚠ fuera de rango ' : 'Rango semana: '}
+              {semanaInicio} → {semanaFin}
+            </span>
+          )}
         </Field>
         <Field label="Fecha disección">
           <input type="date" value={draft.fecha_diseccion} onChange={(e) => setDraft({ ...draft, fecha_diseccion: e.target.value })}
@@ -656,8 +697,13 @@ function DraftForm({ draft, setDraft, catalogos, variedadesHuerto, onCancel, onG
           className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm">
           Cancelar
         </button>
-        <button type="button" onClick={onGuardar} disabled={guardando || !draft.fecha_muestreo || draft.kgs_muestreados <= 0}
-          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold disabled:opacity-60">
+        <button
+          type="button"
+          onClick={handleGuardar}
+          disabled={guardando || !draft.fecha_muestreo || draft.kgs_muestreados <= 0 || fechaFueraDeSemana}
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold disabled:opacity-60"
+          title={fechaFueraDeSemana ? 'Fecha fuera de la semana de la TMIMF' : undefined}
+        >
           {guardando && <span className="size-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
           <Icon name="save" className="text-base" /> Guardar muestreo
         </button>
