@@ -170,31 +170,48 @@ def listar_revisiones(
     session: Session = Depends(get_legacy_db),
     _claims: dict = Depends(get_current_legacy_claims),
 ) -> list[RevisionRow]:
+    # Query 1: revisiones + huerto (sin subquery correlacionada; la correlacionada
+    # escaneaba tmimf una vez por fila y en prod con MariaDB 5.5 hacía timeout).
     rows = session.execute(
         text("""
-            SELECT
-              tr.folio, tr.no_trampa, tr.no_semana, tr.fecha_revision,
-              tr.status_revision, tr.tipo_producto, tr.dias_exposicion,
-              tr.observaciones, tr.validado,
-              TRIM(t.numeroinscripcion) AS numeroinscripcion,
-              (
-                SELECT tmi.folio_tmimf FROM tmimf tmi
-                 WHERE TRIM(tmi.numeroinscripcion) = TRIM(t.numeroinscripcion)
-                   AND tmi.tipo_tarjeta = 'O'
-                   AND tmi.status = 'A'
-                   AND CAST(NULLIF(tmi.semana,'') AS UNSIGNED) = tr.no_semana
-                 LIMIT 1
-              ) AS tmimf_o_folio
-            FROM trampas_revision tr
-            JOIN trampas t ON t.no_trampa = tr.no_trampa
-           WHERE t.folio_ruta = :ruta
-             AND tr.no_semana = :semana
-           ORDER BY t.no_trampa ASC
+            SELECT tr.folio, tr.no_trampa, tr.no_semana, tr.fecha_revision,
+                   tr.status_revision, tr.tipo_producto, tr.dias_exposicion,
+                   tr.observaciones, tr.validado,
+                   TRIM(t.numeroinscripcion) AS numeroinscripcion
+              FROM trampas_revision tr
+              JOIN trampas t ON t.no_trampa = tr.no_trampa
+             WHERE t.folio_ruta = :ruta
+               AND tr.no_semana = :semana
+             ORDER BY t.no_trampa ASC
         """),
         {"ruta": ruta, "semana": semana},
     ).mappings().all()
 
-    # Carga identificacion por lote
+    if not rows:
+        return []
+
+    # Query 2: TMIMF 'O' activas para los huertos de esta semana — una sola
+    # consulta con IN expandido, indexable por tipo_tarjeta/status.
+    inscripciones = sorted({str(r["numeroinscripcion"] or "").strip() for r in rows if r["numeroinscripcion"]})
+    tmimf_o_map: dict[str, str] = {}
+    if inscripciones:
+        tmimf_rows = session.execute(
+            text("""
+                SELECT TRIM(numeroinscripcion) AS ni, folio_tmimf
+                  FROM tmimf
+                 WHERE tipo_tarjeta = 'O'
+                   AND status = 'A'
+                   AND CAST(NULLIF(semana,'') AS UNSIGNED) = :semana
+                   AND TRIM(numeroinscripcion) IN :nis
+            """).bindparams(bindparam("nis", expanding=True)),
+            {"semana": semana, "nis": inscripciones},
+        ).mappings().all()
+        for tr in tmimf_rows:
+            ni = str(tr["ni"] or "")
+            if ni not in tmimf_o_map:  # quedarnos con el primer folio_tmimf si hay duplicados
+                tmimf_o_map[ni] = str(tr["folio_tmimf"])
+
+    # Query 3: identificación por lote
     folios = [int(r["folio"]) for r in rows]
     ident_map: dict[int, list[dict]] = {}
     if folios:
@@ -213,6 +230,8 @@ def listar_revisiones(
     out: list[RevisionRow] = []
     for r in rows:
         rd = dict(r)
+        ni = str(rd.get("numeroinscripcion") or "").strip()
+        tmimf_o_folio = tmimf_o_map.get(ni)
         ids = ident_map.get(int(rd["folio"]), [])
         ident_payload = None
         if ids:
@@ -234,9 +253,9 @@ def listar_revisiones(
             dias_exposicion=rd.get("dias_exposicion"),
             observaciones=rd.get("observaciones"),
             validado=rd.get("validado"),
-            numeroinscripcion=rd.get("numeroinscripcion"),
-            tmimf_o_bloqueo=rd.get("tmimf_o_folio") is not None,
-            tmimf_o_folio=rd.get("tmimf_o_folio"),
+            numeroinscripcion=ni or None,
+            tmimf_o_bloqueo=tmimf_o_folio is not None,
+            tmimf_o_folio=tmimf_o_folio,
             identificacion=ident_payload,
             identificacion_multiple=len(ids) > 1,
         ))
