@@ -38,6 +38,7 @@ import HuertosPorPfaPage from '@/pages/legacy/HuertosPorPfaPage';
 import InformeGeneralPfaPage from '@/pages/legacy/InformeGeneralPfaPage';
 import RutasCatalogoPage from '@/pages/legacy/RutasCatalogoPage';
 import CorreccionRevisionesTrampasPage from '@/pages/legacy/CorreccionRevisionesTrampasPage';
+import CorreccionTrampasPage from '@/pages/legacy/CorreccionTrampasPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 import ForbiddenPage from '@/pages/ForbiddenPage';
 import ServerErrorPage from '@/pages/ServerErrorPage';
@@ -72,6 +73,7 @@ export default function App() {
               <Route path="/legacy/reportes/informe-general-pfa" element={<InformeGeneralPfaPage />} />
               <Route path="/legacy/catalogos/rutas" element={<RutasCatalogoPage />} />
               <Route path="/legacy/correcciones/revisiones-trampas" element={<CorreccionRevisionesTrampasPage />} />
+              <Route path="/legacy/correcciones/trampas" element={<CorreccionTrampasPage />} />
             </Route>
 
             {/* Protected Admin Routes */}
