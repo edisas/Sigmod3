@@ -33,6 +33,18 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.routes.legacy.dependencies import get_current_legacy_claims, get_legacy_db
+from app.api.routes.legacy.helpers import (
+    estado_clave_y_db as _estado_clave_y_db,
+)
+from app.api.routes.legacy.helpers import (
+    fechas_semana as _fechas_semana,
+)
+from app.api.routes.legacy.helpers import (
+    resolver_legacy_user as _resolver_legacy_user,
+)
+from app.api.routes.legacy.helpers import (
+    validar_fecha_en_semana as _validar_fecha_en_semana,
+)
 from app.core.legacy_audit import record_legacy_write
 
 router = APIRouter()
@@ -157,52 +169,6 @@ class MuestreoResult(BaseModel):
 # ──────────────────────────────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────────────────────────────
-
-
-def _resolver_legacy_user(session: Session, claims: dict) -> tuple[int | None, str | None]:
-    try:
-        clave = int(claims.get("sub", 0))
-    except (TypeError, ValueError):
-        return None, None
-    row = session.execute(
-        text("SELECT clave, nick FROM usuarios WHERE clave = :c"),
-        {"c": clave},
-    ).mappings().first()
-    return (int(row["clave"]), str(row["nick"] or "")) if row else (clave, None)
-
-
-def _fechas_semana(session: Session, no_semana_folio: int) -> tuple[date | None, date | None]:
-    """Retorna (fecha_inicio, fecha_final) de la semana por folio, o (None, None)."""
-    row = session.execute(
-        text("SELECT fecha_inicio, fecha_final FROM semanas WHERE folio = :f"),
-        {"f": no_semana_folio},
-    ).mappings().first()
-    if not row:
-        return None, None
-    return row["fecha_inicio"], row["fecha_final"]
-
-
-def _validar_fecha_en_semana(fecha_muestreo: date, fi: date | None, ff: date | None, no_semana: int) -> None:
-    if fi is None or ff is None:
-        return  # sin rango conocido, no bloqueamos
-    if fecha_muestreo < fi or fecha_muestreo > ff:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"fecha_muestreo {fecha_muestreo.isoformat()} está fuera de la semana "
-                f"{no_semana} ({fi.isoformat()} a {ff.isoformat()}). Ajusta la fecha."
-            ),
-        )
-
-
-def _estado_clave_y_db(claims: dict) -> tuple[str, str]:
-    from app.core.legacy_db import resolve_database_name
-    clave = str(claims.get("legacy_db", "")).upper()[:3]
-    try:
-        db_name = resolve_database_name(clave)
-    except Exception:
-        db_name = ""
-    return clave, db_name
 
 
 def _cargar_tmimf_detalle(session: Session, folio_tmimf: str, clave_mov: str) -> TmimfDetalle:

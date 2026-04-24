@@ -24,6 +24,12 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.routes.legacy.dependencies import get_current_legacy_claims, get_legacy_db
+from app.api.routes.legacy.helpers import (
+    estado_clave_y_db as _estado_clave_y_db,
+)
+from app.api.routes.legacy.helpers import (
+    resolver_legacy_user as _resolver_legacy_user,
+)
 from app.core.legacy_audit import record_legacy_write
 
 router = APIRouter()
@@ -195,33 +201,6 @@ def cascada_preview(
 # ──────────────────────────────────────────────────────────────────────
 # PATCH: corregir una ruta con cascada a trampas.folio_tecnico
 # ──────────────────────────────────────────────────────────────────────
-
-
-def _resolver_legacy_user(session: Session, claims: dict) -> tuple[int | None, str | None]:
-    """Lee usuarios.{clave, nick} de la BD legacy para la auditoría."""
-    try:
-        clave = int(claims.get("sub", 0))
-    except (TypeError, ValueError):
-        return None, None
-    row = session.execute(
-        text("SELECT clave, nick FROM usuarios WHERE clave = :c"),
-        {"c": clave},
-    ).mappings().first()
-    if not row:
-        return clave, None
-    return int(row["clave"]), str(row["nick"] or "")
-
-
-def _estado_clave_y_db(claims: dict) -> tuple[str, str]:
-    """Retorna ('SIN', 'sinaloa_2026') para la auditoría."""
-    from app.core.legacy_db import resolve_database_name  # import local por ciclos
-
-    clave = str(claims.get("legacy_db", "")).upper()[:3]
-    try:
-        db_name = resolve_database_name(clave)
-    except Exception:
-        db_name = ""
-    return clave, db_name
 
 
 @router.patch("/rutas/{folio}", response_model=PatchRutaResult)

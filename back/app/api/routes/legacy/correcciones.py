@@ -37,6 +37,15 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from app.api.routes.legacy.dependencies import get_current_legacy_claims, get_legacy_db
+from app.api.routes.legacy.helpers import (
+    estado_clave_y_db as _estado_clave_y_db,
+)
+from app.api.routes.legacy.helpers import (
+    resolver_legacy_user as _resolver_legacy_user,
+)
+from app.api.routes.legacy.helpers import (
+    to_int_or_none as _to_int_or_none,
+)
 from app.core.legacy_audit import record_legacy_write
 
 router = APIRouter()
@@ -345,29 +354,6 @@ def catalogos(
 
 
 STATUS_REVISADA_CON_CAPTURA = 2
-
-
-def _resolver_legacy_user(session: Session, claims: dict) -> tuple[int | None, str | None]:
-    try:
-        clave = int(claims.get("sub", 0))
-    except (TypeError, ValueError):
-        return None, None
-    row = session.execute(
-        text("SELECT clave, nick FROM usuarios WHERE clave = :c"),
-        {"c": clave},
-    ).mappings().first()
-    return (int(row["clave"]), str(row["nick"] or "")) if row else (clave, None)
-
-
-def _estado_clave_y_db(claims: dict) -> tuple[str, str]:
-    from app.core.legacy_db import resolve_database_name
-
-    clave = str(claims.get("legacy_db", "")).upper()[:3]
-    try:
-        db_name = resolve_database_name(clave)
-    except Exception:
-        db_name = ""
-    return clave, db_name
 
 
 @router.patch("/revisiones/{folio}", response_model=PatchRevisionResult)
@@ -684,13 +670,6 @@ def actualizar_revision(
     )
 
 
-def _to_int_or_none(value) -> int | None:
-    if value is None:
-        return None
-    try:
-        return int(str(value).strip())
-    except (TypeError, ValueError):
-        return None
 
 
 # ══════════════════════════════════════════════════════════════════════
