@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
+import jwt
 from app.core.config import get_settings
-from jose import JWTError, jwt
 
 ALGORITHM = "HS256"
 LEGACY_SCOPE = "legacy"
@@ -25,7 +25,7 @@ def decode_legacy_token(token: str) -> dict | None:
     settings = get_settings()
     try:
         payload = jwt.decode(token, settings.legacy_secret_key, algorithms=[ALGORITHM])
-    except JWTError:
+    except jwt.InvalidTokenError:
         return None
     if payload.get("scope") != LEGACY_SCOPE:
         return None

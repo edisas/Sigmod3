@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
+import jwt
 from app.core.config import get_settings
-from jose import JWTError, jwt
 
 ALGORITHM = "HS256"
 UTC = timezone.utc  # compat py3.10 — datetime.UTC llegó en 3.11
@@ -34,6 +34,6 @@ def decode_token(token: str) -> dict[str, str | int] | None:
     settings = get_settings()
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
-    except JWTError:
+    except jwt.InvalidTokenError:
         return None
     return payload

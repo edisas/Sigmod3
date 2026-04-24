@@ -52,4 +52,7 @@ addopts = [
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:passlib.*",  # passlib tiene warnings conocidos con python 3.13
+    # PyJWT avisa que el SECRET_KEY es < 32 bytes (RFC 7518). Válido pero ruidoso;
+    # la rotación de credenciales ya está en el roadmap (Fase 0). Silenciamos mientras tanto.
+    "ignore::jwt.warnings.InsecureKeyLengthWarning",
 ]

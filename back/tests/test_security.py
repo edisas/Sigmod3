@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
+import jwt
 import pytest
 from app.core.config import get_settings
 from app.core.security import (
@@ -11,7 +12,6 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
-from jose import jwt
 
 UTC = timezone.utc  # compat py3.10
 

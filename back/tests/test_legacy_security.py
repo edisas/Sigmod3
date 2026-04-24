@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
+import jwt
 from app.core.config import get_settings
 from app.core.legacy_security import (
     ALGORITHM,
@@ -9,7 +10,6 @@ from app.core.legacy_security import (
     create_legacy_token,
     decode_legacy_token,
 )
-from jose import jwt
 
 UTC = timezone.utc  # compat py3.10
 
