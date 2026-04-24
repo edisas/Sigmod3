@@ -257,7 +257,7 @@ def _compute_trampeo(session: Session, params: dict, agregado: list[dict] | None
     # (cada TMIMF 'O' es un huerto × semana con sus trampas).
     huertos_count = len(agregado)
     trampas_instaladas_total = (
-        int(round(trampas_instaladas_acumulado / semanas)) if semanas > 0 and huertos_count > 0 else 0
+        round(trampas_instaladas_acumulado / semanas) if semanas > 0 and huertos_count > 0 else 0
     )
     trampas_x_semanas = trampas_instaladas_acumulado
 

@@ -1,8 +1,7 @@
-from datetime import datetime, timedelta, timezone
-
-from jose import JWTError, jwt
+from datetime import UTC, datetime, timedelta
 
 from app.core.config import get_settings
+from jose import JWTError, jwt
 
 ALGORITHM = "HS256"
 LEGACY_SCOPE = "legacy"
@@ -10,7 +9,7 @@ LEGACY_SCOPE = "legacy"
 
 def create_legacy_token(user_id: int, legacy_db: str, nivel: int) -> str:
     settings = get_settings()
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.legacy_token_expire_minutes)
+    expire = datetime.now(UTC) + timedelta(minutes=settings.legacy_token_expire_minutes)
     payload = {
         "sub": str(user_id),
         "legacy_db": legacy_db,

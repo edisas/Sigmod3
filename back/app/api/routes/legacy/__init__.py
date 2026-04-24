@@ -1,9 +1,15 @@
 from fastapi import APIRouter
 
 from app.api.routes.legacy import (
-    auth, catalogos, correcciones, correcciones_muestreo,
-    dashboard, dashboard_muestreo, dashboard_trampeos,
-    informe_general, reportes,
+    auth,
+    catalogos,
+    correcciones,
+    correcciones_muestreo,
+    dashboard,
+    dashboard_muestreo,
+    dashboard_trampeos,
+    informe_general,
+    reportes,
 )
 
 router = APIRouter()

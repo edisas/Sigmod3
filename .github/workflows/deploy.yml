@@ -30,11 +30,22 @@ jobs:
           cache: 'pip'
           cache-dependency-path: back/requirements.txt
 
-      - name: Backend smoke test
+      - name: Backend venv + deps
         run: |
           python -m venv /tmp/venv
           /tmp/venv/bin/pip install -r back/requirements.txt
-          PYTHONPATH=back /tmp/venv/bin/python -c "from app.main import app; print('OK', len(app.routes), 'routes')"
+          /tmp/venv/bin/pip install ruff pytest pytest-anyio httpx
+
+      - name: Backend lint (ruff)
+        working-directory: back
+        run: /tmp/venv/bin/ruff check app tests
+
+      - name: Backend unit tests (pytest)
+        working-directory: back
+        run: PYTHONPATH=. /tmp/venv/bin/pytest tests -q
+
+      - name: Backend smoke test
+        run: PYTHONPATH=back /tmp/venv/bin/python -c "from app.main import app; print('OK', len(app.routes), 'routes')"
 
       - name: Node setup
         uses: actions/setup-node@v4
@@ -46,6 +57,14 @@ jobs:
       - name: Frontend npm ci
         working-directory: front
         run: npm ci
+
+      - name: Frontend lint (eslint)
+        working-directory: front
+        run: npm run lint
+
+      - name: Frontend unit tests (vitest)
+        working-directory: front
+        run: npm run test:unit
 
       - name: Frontend build
         working-directory: front

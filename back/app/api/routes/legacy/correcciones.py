@@ -631,8 +631,6 @@ def actualizar_revision(
         )
 
     # 8. Re-cargar y devolver el estado final
-    refreshed = listar_revisiones.__wrapped__ if hasattr(listar_revisiones, "__wrapped__") else None  # type: ignore[attr-defined]
-    # más sencillo: ejecutar las mismas queries otra vez
     post = session.execute(
         text("""
             SELECT tr.folio, tr.no_trampa, tr.no_semana, tr.fecha_revision,

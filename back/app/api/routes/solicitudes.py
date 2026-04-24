@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import secrets
 import uuid
-from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -21,6 +20,7 @@ from app.schemas import (
     MunicipioResponse,
     RegionTecnicaResponse,
     RolResponse,
+    RoutingHintResponse,
     SolicitudAccesoCreateRequest,
     SolicitudAccesoCreateResponse,
     SolicitudCatalogosResponse,
@@ -28,7 +28,6 @@ from app.schemas import (
     SolicitudFormResponse,
     SolicitudListadoItem,
     StateResponse,
-    RoutingHintResponse,
     TemporadaResponse,
 )
 
@@ -639,17 +638,17 @@ def crear_solicitud_acceso(
         {"estado_id": estado_id},
     ).mappings().first()
     ccp_refiaae_text = (
-        f"{str(ccp['refiaae_cargo'])} ({str(ccp['refiaae_nombre'])}) en el Estado de {estado_nombre}"
+        f"{ccp['refiaae_cargo']!s} ({ccp['refiaae_nombre']!s}) en el Estado de {estado_nombre}"
         if ccp
         else f"Puesto no configurado en el Estado de {estado_nombre}"
     )
     ccp_ccmfe_text = (
-        f"{str(ccp['ccmfe_cargo'])} ({str(ccp['ccmfe_nombre'])}) en el Estado de {estado_nombre}"
+        f"{ccp['ccmfe_cargo']!s} ({ccp['ccmfe_nombre']!s}) en el Estado de {estado_nombre}"
         if ccp
         else f"Puesto no configurado en el Estado de {estado_nombre}"
     )
     ccp_ricesav_text = (
-        f"{str(ccp['ricesav_cargo'])} ({str(ccp['ricesav_nombre'])}) en el Estado de {estado_nombre}"
+        f"{ccp['ricesav_cargo']!s} ({ccp['ricesav_nombre']!s}) en el Estado de {estado_nombre}"
         if ccp
         else f"Puesto no configurado en el Estado de {estado_nombre}"
     )

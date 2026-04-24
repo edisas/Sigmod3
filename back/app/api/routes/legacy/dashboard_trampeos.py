@@ -209,8 +209,10 @@ def top_especies(
     ).mappings().all()
     out: list[EspecieRow] = []
     for r in rows:
-        hs = int(r["hs"] or 0); ms = int(r["ms"] or 0)
-        he = int(r["he"] or 0); me = int(r["me"] or 0)
+        hs = int(r["hs"] or 0)
+        ms = int(r["ms"] or 0)
+        he = int(r["he"] or 0)
+        me = int(r["me"] or 0)
         silv = hs + ms
         estr = he + me
         out.append(EspecieRow(
@@ -302,8 +304,10 @@ def capturas_por_semana(
 
     out: list[CapturasPorSemana] = []
     for r in cap_rows:
-        hs = int(r["hs"] or 0); ms = int(r["ms"] or 0)
-        he = int(r["he"] or 0); me = int(r["me"] or 0)
+        hs = int(r["hs"] or 0)
+        ms = int(r["ms"] or 0)
+        he = int(r["he"] or 0)
+        me = int(r["me"] or 0)
         sem_folio = int(r["sem_folio"])
         sem_anio = r["sem_anio"]
         periodo = r["periodo"]
@@ -404,11 +408,13 @@ def por_modulo(
     for r in ident_rows:
         nt = str(r["no_trampa"])
         info = trampa_to_modulo.get(nt)
-        if not info: continue
+        if not info:
+            continue
         mf, nombre, ni = info
         agg = by_modulo.setdefault(mf, {"nombre": nombre, "revs": set(), "huertos": set(), "silv": 0, "estr": 0})
         agg["revs"].add(int(r["folio_revision"]))
-        if ni: agg["huertos"].add(ni)
+        if ni:
+            agg["huertos"].add(ni)
         agg["silv"] += int(r["hs"] or 0) + int(r["ms"] or 0)
         agg["estr"] += int(r["he"] or 0) + int(r["me"] or 0)
 

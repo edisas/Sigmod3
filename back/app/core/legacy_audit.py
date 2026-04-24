@@ -16,13 +16,13 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Mapping
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Mapping
-
-from sqlalchemy import text
+from typing import Any
 
 from app.db import SessionLocal
+from sqlalchemy import text
 
 log = logging.getLogger(__name__)
 

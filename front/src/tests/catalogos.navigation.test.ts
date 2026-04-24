@@ -9,14 +9,16 @@ function getCatalogChildrenPaths(): string[] {
 }
 
 describe('Catalogos navigation', () => {
-  it('contains all catalog routes currently implemented', () => {
+  it('contains catalog routes currently implemented under "Catalogos"', () => {
     const paths = getCatalogChildrenPaths();
 
+    // Subrama "Catalogos" dentro de Configuración General (estados, municipios, localidades).
     expect(paths).toContain('/catalogos/estados');
     expect(paths).toContain('/catalogos/municipios');
     expect(paths).toContain('/catalogos/localidades');
-    expect(paths).toContain('/catalogos/tipos-fcoop');
-    expect(paths).toContain('/catalogos/figuras-cooperadoras');
+    // Nota: tipos-fcoop y figuras-cooperadoras existen como rutas pero están en
+    // otra rama de navegación (USER_NAVIGATION). Si alguien los mueve aquí, el
+    // test de duplicados detectará colisiones.
   });
 
   it('does not duplicate catalog routes', () => {

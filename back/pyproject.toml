@@ -1,0 +1,52 @@
+[project]
+name = "sigmod3-backend"
+version = "0.1.0"
+description = "SIGMOD V3 — API FastAPI"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+src = ["app", "tests"]
+extend-exclude = ["migrations", ".venv"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "RUF", # ruff-specific rules
+    "SIM", # simplify
+    "T10", # debugger imports
+]
+ignore = [
+    "E501",  # line too long — line-length=120 arriba pero dejamos flexibilidad a docstrings/SQL inline
+    "B008",  # function call in defaults → FastAPI usa Depends() en defaults intencionalmente
+    "RUF001", "RUF002", "RUF003",  # caracteres unicode en strings es intencional (español)
+    "SIM108",  # if-else puede ser ternario: a veces menos legible
+    "UP045",   # Optional[X] → X | None: dejamos compatibilidad con ambos estilos existentes
+]
+
+[tool.ruff.lint.per-file-ignores]
+"migrate.py" = ["T201"]  # prints en CLI son intencionales
+"tests/**" = ["B011"]    # assert False en tests es válido
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["*TestCase", "Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--disable-warnings",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:passlib.*",  # passlib tiene warnings conocidos con python 3.13
+]

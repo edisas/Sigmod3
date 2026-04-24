@@ -1,13 +1,12 @@
 from threading import Lock
 from urllib.parse import quote_plus
 
-from sqlalchemy import create_engine, select
-from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session, sessionmaker
-
 from app.core.config import get_settings
 from app.db import SessionLocal
 from app.models import LegacyDatabase
+from sqlalchemy import create_engine, select
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session, sessionmaker
 
 _engines: dict[str, Engine] = {}
 _session_factories: dict[str, sessionmaker] = {}

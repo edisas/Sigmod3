@@ -1,9 +1,8 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
-from jose import JWTError, jwt
-
 from app.core.config import get_settings
+from jose import JWTError, jwt
 
 ALGORITHM = "HS256"
 
@@ -23,7 +22,7 @@ def create_access_token(subject: str, estado_activo_id: int | None = None, scope
     settings = get_settings()
     ttl = expires_minutes if expires_minutes is not None else settings.access_token_expire_minutes
     expires_delta = timedelta(minutes=ttl)
-    expire = datetime.now(timezone.utc) + expires_delta
+    expire = datetime.now(UTC) + expires_delta
     payload: dict[str, str | int | datetime] = {"sub": subject, "exp": expire, "scope": scope}
     if estado_activo_id is not None:
         payload["estado_activo_id"] = estado_activo_id
