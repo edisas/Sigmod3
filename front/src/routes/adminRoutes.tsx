@@ -1,0 +1,74 @@
+import { lazy } from 'react';
+import { Route } from 'react-router-dom';
+import ProtectedRoute from '@/components/auth/ProtectedRoute';
+import AdminLayout from '@/components/layout/AdminLayout';
+import AuthLayout from '@/components/layout/AuthLayout';
+
+// Lazy para code splitting — bundle inicial solo trae root + login.
+const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
+const LoginPage = lazy(() => import('@/pages/LoginPage'));
+const RegisterPage = lazy(() => import('@/pages/RegisterPage'));
+const AccessRequestPage = lazy(() => import('@/pages/AccessRequestPage'));
+const RequestsListPage = lazy(() => import('@/pages/RequestsListPage'));
+const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
+const CatalogEstadosPage = lazy(() => import('@/pages/CatalogEstadosPage'));
+const CatalogEstadoFormPage = lazy(() => import('@/pages/CatalogEstadoFormPage'));
+const CatalogMunicipiosPage = lazy(() => import('@/pages/CatalogMunicipiosPage'));
+const CatalogMunicipioFormPage = lazy(() => import('@/pages/CatalogMunicipioFormPage'));
+const CatalogLocalidadesPage = lazy(() => import('@/pages/CatalogLocalidadesPage'));
+const CatalogLocalidadFormPage = lazy(() => import('@/pages/CatalogLocalidadFormPage'));
+const CatalogTiposFcoopPage = lazy(() => import('@/pages/CatalogTiposFcoopPage'));
+const CatalogTipoFcoopFormPage = lazy(() => import('@/pages/CatalogTipoFcoopFormPage'));
+const CatalogFigurasCooperadorasPage = lazy(() => import('@/pages/CatalogFigurasCooperadorasPage'));
+const CatalogFiguraCooperadoraFormPage = lazy(() => import('@/pages/CatalogFiguraCooperadoraFormPage'));
+const FiguraCooperadoraAutorizacionPage = lazy(() => import('@/pages/FiguraCooperadoraAutorizacionPage'));
+const AutorizacionesFcoopListPage = lazy(() => import('@/pages/AutorizacionesFcoopListPage'));
+const SystemConfigPage = lazy(() => import('@/pages/SystemConfigPage'));
+const MenuSettingsPage = lazy(() => import('@/pages/MenuSettingsPage'));
+const EmptyStatePage = lazy(() => import('@/pages/EmptyStatePage'));
+
+export const publicAuthRoutes = (
+  <Route element={<AuthLayout />}>
+    <Route path="/login" element={<LoginPage />} />
+    <Route path="/register" element={<RegisterPage />} />
+  </Route>
+);
+
+export const adminProtectedRoutes = (
+  <Route
+    element={
+      <ProtectedRoute>
+        <AdminLayout />
+      </ProtectedRoute>
+    }
+  >
+    <Route path="/" element={<DashboardPage />} />
+    <Route path="/solicitudes" element={<RequestsListPage />} />
+    <Route path="/solicitud-acceso" element={<AccessRequestPage />} />
+    <Route path="/profile" element={<ProfilePage />} />
+    <Route path="/catalogos/estados" element={<CatalogEstadosPage />} />
+    <Route path="/catalogos/estados/nuevo" element={<CatalogEstadoFormPage />} />
+    <Route path="/catalogos/estados/:estadoId/editar" element={<CatalogEstadoFormPage />} />
+    <Route path="/catalogos/municipios" element={<CatalogMunicipiosPage />} />
+    <Route path="/catalogos/municipios/nuevo" element={<CatalogMunicipioFormPage />} />
+    <Route path="/catalogos/municipios/:municipioId/editar" element={<CatalogMunicipioFormPage />} />
+    <Route path="/catalogos/localidades" element={<CatalogLocalidadesPage />} />
+    <Route path="/catalogos/localidades/nuevo" element={<CatalogLocalidadFormPage />} />
+    <Route path="/catalogos/localidades/:localidadId/editar" element={<CatalogLocalidadFormPage />} />
+    <Route path="/catalogos/tipos-fcoop" element={<CatalogTiposFcoopPage />} />
+    <Route path="/catalogos/tipos-fcoop/nuevo" element={<CatalogTipoFcoopFormPage />} />
+    <Route path="/catalogos/tipos-fcoop/:tipoId/editar" element={<CatalogTipoFcoopFormPage />} />
+    <Route path="/catalogos/figuras-cooperadoras" element={<CatalogFigurasCooperadorasPage />} />
+    <Route path="/catalogos/figuras-cooperadoras/nuevo" element={<CatalogFiguraCooperadoraFormPage />} />
+    <Route path="/catalogos/figuras-cooperadoras/:figuraId/editar" element={<CatalogFiguraCooperadoraFormPage />} />
+    <Route path="/configuracion/sistema" element={<SystemConfigPage />} />
+    <Route path="/configuracion/menus" element={<MenuSettingsPage />} />
+    <Route path="/autorizaciones/figura-cooperadora/listado" element={<AutorizacionesFcoopListPage />} />
+    <Route path="/autorizaciones/figura-cooperadora" element={<FiguraCooperadoraAutorizacionPage />} />
+    <Route path="/map" element={<EmptyStatePage />} />
+    <Route path="/analytics" element={<EmptyStatePage />} />
+    <Route path="/sensors" element={<EmptyStatePage />} />
+    <Route path="/sustainability" element={<EmptyStatePage />} />
+    <Route path="/settings" element={<EmptyStatePage />} />
+  </Route>
+);
