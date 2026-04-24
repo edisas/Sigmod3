@@ -1,6 +1,6 @@
 """Unit tests para app.core.legacy_security — JWT del módulo legacy (scope 'legacy')."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.core.config import get_settings
 from app.core.legacy_security import (
@@ -10,6 +10,8 @@ from app.core.legacy_security import (
     decode_legacy_token,
 )
 from jose import jwt
+
+UTC = timezone.utc  # compat py3.10
 
 
 class TestLegacyToken:

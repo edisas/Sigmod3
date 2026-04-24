@@ -1,6 +1,6 @@
 """Unit tests para app.core.security — hash/verify password y JWT access tokens."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from app.core.config import get_settings
@@ -12,6 +12,8 @@ from app.core.security import (
     verify_password,
 )
 from jose import jwt
+
+UTC = timezone.utc  # compat py3.10
 
 
 class TestPasswordHashing:

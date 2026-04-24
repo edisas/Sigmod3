@@ -1,10 +1,11 @@
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import bcrypt
 from app.core.config import get_settings
 from jose import JWTError, jwt
 
 ALGORITHM = "HS256"
+UTC = timezone.utc  # compat py3.10 — datetime.UTC llegó en 3.11
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

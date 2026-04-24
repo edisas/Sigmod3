@@ -6,7 +6,10 @@ requires-python = ">=3.11"
 
 [tool.ruff]
 line-length = 120
-target-version = "py311"
+# prod usa Python 3.10 (systemd en contabo1 con ubuntu 22.04). Mantenemos
+# target 3.10 para que ruff avise de features de 3.11+ (datetime.UTC, typing.Self, ...)
+# que romperían el deploy.
+target-version = "py310"
 src = ["app", "tests"]
 extend-exclude = ["migrations", ".venv"]
 

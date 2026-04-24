@@ -1,10 +1,11 @@
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.core.config import get_settings
 from jose import JWTError, jwt
 
 ALGORITHM = "HS256"
 LEGACY_SCOPE = "legacy"
+UTC = timezone.utc  # compat py3.10 — datetime.UTC llegó en 3.11
 
 
 def create_legacy_token(user_id: int, legacy_db: str, nivel: int) -> str:
