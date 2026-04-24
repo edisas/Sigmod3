@@ -18,6 +18,7 @@ const DashboardTrampeosPage = lazy(() => import('@/pages/legacy/DashboardTrampeo
 const DashboardMuestreoPage = lazy(() => import('@/pages/legacy/DashboardMuestreoPage'));
 const CorreccionMuestreosPage = lazy(() => import('@/pages/legacy/CorreccionMuestreosPage'));
 const CorreccionTmimfOFaltantesPage = lazy(() => import('@/pages/legacy/CorreccionTmimfOFaltantesPage'));
+const TmimfsEmitidasPage = lazy(() => import('@/pages/legacy/TmimfsEmitidasPage'));
 
 export const legacyPublicRoutes = [
   <Route key="legacy-login" path="/legacy/login" element={<LegacyLoginPage />} />,
@@ -43,5 +44,6 @@ export const legacyProtectedRoutes = (
     <Route path="/legacy/dashboard-muestreo" element={<DashboardMuestreoPage />} />
     <Route path="/legacy/correcciones/muestreos" element={<CorreccionMuestreosPage />} />
     <Route path="/legacy/correcciones/tmimf-o-faltantes" element={<CorreccionTmimfOFaltantesPage />} />
+    <Route path="/legacy/reportes/tmimfs-emitidas" element={<TmimfsEmitidasPage />} />
   </Route>
 );
