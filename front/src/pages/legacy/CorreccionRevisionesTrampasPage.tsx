@@ -35,8 +35,8 @@ interface RevisionRow {
   numeroinscripcion: string | null;
   tmimf_o_bloqueo: boolean;
   tmimf_o_folio: string | null;
-  identificacion: Identificacion | null;
-  identificacion_multiple: boolean;
+  // Lista de 0..N identificaciones por especie capturada.
+  identificaciones: Identificacion[];
 }
 
 interface DiasExposicionPreview {
@@ -51,8 +51,25 @@ interface Draft {
   tipo_producto: number | null;
   dias_exposicion: number;
   validado: 'S' | 'N';
-  identificacion: Identificacion;
+  identificaciones: Identificacion[];
 }
+
+const emptyIdent = (): Identificacion => ({
+  tipo_especie: 0,
+  hembras_silvestre: 0,
+  machos_silvestre: 0,
+  hembras_esteril: 0,
+  machos_esteril: 0,
+});
+
+const identsIguales = (a: Identificacion[], b: Identificacion[]): boolean => {
+  if (a.length !== b.length) return false;
+  const key = (x: Identificacion) =>
+    `${x.tipo_especie}|${x.hembras_silvestre}|${x.machos_silvestre}|${x.hembras_esteril}|${x.machos_esteril}`;
+  const sa = [...a].map(key).sort();
+  const sb = [...b].map(key).sort();
+  return sa.every((v, i) => v === sb[i]);
+};
 
 interface Toast { kind: 'ok' | 'err' | 'warn'; text: string }
 
@@ -168,13 +185,6 @@ export default function CorreccionRevisionesTrampasPage() {
       });
       return;
     }
-    if (r.identificacion_multiple) {
-      setToast({
-        kind: 'warn',
-        text: 'Esta revisión tiene múltiples especies capturadas. Corrige en SIGMOD 2 directamente (V3 MVP soporta una sola especie).',
-      });
-      return;
-    }
     setEditingFolio(r.folio);
     setDraft({
       fecha_revision:  r.fecha_revision ?? '',
@@ -182,9 +192,25 @@ export default function CorreccionRevisionesTrampasPage() {
       tipo_producto:   r.tipo_producto,
       dias_exposicion: r.dias_exposicion ?? 0,
       validado:        (r.validado === 'S' ? 'S' : 'N'),
-      identificacion:  r.identificacion ?? { tipo_especie: 0, hembras_silvestre: 0, machos_silvestre: 0, hembras_esteril: 0, machos_esteril: 0 },
+      identificaciones: r.identificaciones.length > 0
+        ? r.identificaciones.map((i) => ({ ...i }))
+        : [emptyIdent()],
     });
     setPreview(null);
+  };
+
+  const updateIdent = (idx: number, patch: Partial<Identificacion>) => {
+    if (!draft) return;
+    const next = draft.identificaciones.map((it, i) => i === idx ? { ...it, ...patch } : it);
+    setDraft({ ...draft, identificaciones: next });
+  };
+  const addIdent = () => {
+    if (!draft) return;
+    setDraft({ ...draft, identificaciones: [...draft.identificaciones, emptyIdent()] });
+  };
+  const removeIdent = (idx: number) => {
+    if (!draft) return;
+    setDraft({ ...draft, identificaciones: draft.identificaciones.filter((_, i) => i !== idx) });
   };
   const cancelEdit = () => { setEditingFolio(null); setDraft(null); setPreview(null); };
 
@@ -223,26 +249,19 @@ export default function CorreccionRevisionesTrampasPage() {
     const entraA2 = draft.status_revision === STATUS_REVISADA_CON_CAPTURA && r.status_revision !== STATUS_REVISADA_CON_CAPTURA;
     const manteneEn2 = draft.status_revision === STATUS_REVISADA_CON_CAPTURA && r.status_revision === STATUS_REVISADA_CON_CAPTURA;
 
-    if (entraA2) {
-      if (!draft.identificacion.tipo_especie) {
-        setToast({ kind: 'err', text: 'Selecciona la especie identificada antes de guardar.' });
+    if (entraA2 || manteneEn2) {
+      const idents = draft.identificaciones.filter((i) => i.tipo_especie > 0);
+      if (entraA2 && idents.length === 0) {
+        setToast({ kind: 'err', text: 'Agrega al menos una especie identificada antes de guardar.' });
         return;
       }
-      body.identificacion = draft.identificacion;
-    } else if (manteneEn2) {
-      // incluir identificacion solo si hubo cambios contra el original
-      const o = r.identificacion;
-      const d = draft.identificacion;
-      const cambio =
-        !o ||
-        o.tipo_especie !== d.tipo_especie ||
-        o.hembras_silvestre !== d.hembras_silvestre ||
-        o.machos_silvestre !== d.machos_silvestre ||
-        o.hembras_esteril !== d.hembras_esteril ||
-        o.machos_esteril !== d.machos_esteril;
-      if (cambio) {
-        if (!d.tipo_especie) { setToast({ kind: 'err', text: 'Selecciona la especie identificada.' }); return; }
-        body.identificacion = d;
+      const tipos = idents.map((i) => i.tipo_especie);
+      if (tipos.length !== new Set(tipos).size) {
+        setToast({ kind: 'err', text: 'No puedes repetir la misma especie en esta revisión.' });
+        return;
+      }
+      if (entraA2 || !identsIguales(r.identificaciones, idents)) {
+        body.identificaciones = idents;
       }
     }
 
@@ -551,32 +570,69 @@ export default function CorreccionRevisionesTrampasPage() {
                         </td>
                       </tr>
 
-                      {/* Sub-form de identificación cuando status=2 en edición */}
+                      {/* Sub-form de identificación (multi-especie) cuando status=2 en edición */}
                       {isEditing && draft && draft.status_revision === STATUS_REVISADA_CON_CAPTURA && (
                         <tr key={`${r.folio}-ident`} className="bg-emerald-50/40 dark:bg-emerald-900/10 border-t border-emerald-100 dark:border-emerald-900/30">
-                          <td colSpan={8} className="px-3 py-3">
-                            <div className="flex items-start gap-3 flex-wrap">
+                          <td colSpan={8} className="px-3 py-3 space-y-2">
+                            <div className="flex items-center justify-between gap-3">
                               <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 dark:text-emerald-300 whitespace-nowrap">
-                                <Icon name="bug_report" className="text-sm" /> Identificación
+                                <Icon name="bug_report" className="text-sm" />
+                                Identificación por especie — {draft.identificaciones.length} registro{draft.identificaciones.length !== 1 ? 's' : ''}
                               </span>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <label className="text-xs text-slate-600 dark:text-slate-400">Especie</label>
-                                <select
-                                  value={draft.identificacion.tipo_especie}
-                                  onChange={(e) => setDraft({ ...draft, identificacion: { ...draft.identificacion, tipo_especie: Number(e.target.value) } })}
-                                  className="px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs min-w-[200px]"
-                                >
-                                  <option value={0}>— Selecciona —</option>
-                                  {catalogos?.especies.map((es) => (
-                                    <option key={es.folio} value={es.folio}>{es.folio} · {es.nombre}</option>
-                                  ))}
-                                </select>
-                              </div>
-                              <IntField label="♀ silvestre" value={draft.identificacion.hembras_silvestre} onChange={(v) => setDraft({ ...draft, identificacion: { ...draft.identificacion, hembras_silvestre: v } })} />
-                              <IntField label="♂ silvestre" value={draft.identificacion.machos_silvestre}  onChange={(v) => setDraft({ ...draft, identificacion: { ...draft.identificacion, machos_silvestre:  v } })} />
-                              <IntField label="♀ estéril"  value={draft.identificacion.hembras_esteril}   onChange={(v) => setDraft({ ...draft, identificacion: { ...draft.identificacion, hembras_esteril:   v } })} />
-                              <IntField label="♂ estéril"  value={draft.identificacion.machos_esteril}    onChange={(v) => setDraft({ ...draft, identificacion: { ...draft.identificacion, machos_esteril:    v } })} />
+                              <button
+                                type="button"
+                                onClick={addIdent}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-emerald-400 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-xs font-medium"
+                              >
+                                <Icon name="add" className="text-sm" />
+                                Agregar especie
+                              </button>
                             </div>
+                            {draft.identificaciones.map((ident, idx) => {
+                              const otrasYaSeleccionadas = draft.identificaciones
+                                .filter((_, i) => i !== idx)
+                                .map((i) => i.tipo_especie);
+                              return (
+                                <div
+                                  key={idx}
+                                  className="flex items-start gap-3 flex-wrap pl-4 border-l-2 border-emerald-300 dark:border-emerald-800"
+                                >
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <label className="text-xs text-slate-600 dark:text-slate-400">Especie</label>
+                                    <select
+                                      value={ident.tipo_especie}
+                                      onChange={(e) => updateIdent(idx, { tipo_especie: Number(e.target.value) })}
+                                      className="px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs min-w-[200px]"
+                                    >
+                                      <option value={0}>— Selecciona —</option>
+                                      {catalogos?.especies.map((es) => (
+                                        <option
+                                          key={es.folio}
+                                          value={es.folio}
+                                          disabled={es.folio !== ident.tipo_especie && otrasYaSeleccionadas.includes(es.folio)}
+                                        >
+                                          {es.folio} · {es.nombre}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <IntField label="♀ silvestre" value={ident.hembras_silvestre} onChange={(v) => updateIdent(idx, { hembras_silvestre: v })} />
+                                  <IntField label="♂ silvestre" value={ident.machos_silvestre}  onChange={(v) => updateIdent(idx, { machos_silvestre:  v })} />
+                                  <IntField label="♀ estéril"  value={ident.hembras_esteril}   onChange={(v) => updateIdent(idx, { hembras_esteril:   v })} />
+                                  <IntField label="♂ estéril"  value={ident.machos_esteril}    onChange={(v) => updateIdent(idx, { machos_esteril:    v })} />
+                                  {draft.identificaciones.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => removeIdent(idx)}
+                                      className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs"
+                                      title="Quitar esta especie"
+                                    >
+                                      <Icon name="close" className="text-sm" />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </td>
                         </tr>
                       )}

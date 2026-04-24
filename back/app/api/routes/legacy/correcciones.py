@@ -95,8 +95,10 @@ class RevisionRow(BaseModel):
     numeroinscripcion: str | None
     tmimf_o_bloqueo: bool
     tmimf_o_folio: str | None
-    identificacion: IdentificacionPayload | None
-    identificacion_multiple: bool
+    # Lista de 0..N identificaciones por especie capturada en esta revisión.
+    # Si status_revision != 2, siempre está vacía. Multi-especie (>1 fila) es
+    # común en SIGMOD 2 — no se bloquea.
+    identificaciones: list[IdentificacionPayload]
 
 
 class DiasExposicionPreview(BaseModel):
@@ -122,7 +124,10 @@ class PatchRevisionBody(BaseModel):
     tipo_producto: int | None = Field(default=None, ge=1)
     dias_exposicion: int | None = Field(default=None, ge=0, le=90)
     validado: Literal["S", "N"] | None = None
-    identificacion: IdentificacionPayload | None = None
+    # Set completo de especies capturadas. Enviarlo reemplaza totalmente las
+    # filas previas de `identificacion` para esta revisión (DELETE + INSERT N).
+    # Requerido al entrar a status 2; omitir o []  → no se tocan.
+    identificaciones: list[IdentificacionPayload] | None = None
 
 
 class PatchRevisionResult(BaseModel):
@@ -267,16 +272,16 @@ def listar_revisiones(
         ni = str(rd.get("numeroinscripcion") or "").strip()
         tmimf_o_folio = tmimf_o_map.get(ni)
         ids = ident_map.get(int(rd["folio"]), [])
-        ident_payload = None
-        if ids:
-            first = ids[0]
-            ident_payload = IdentificacionPayload(
-                tipo_especie=int(first.get("tipo_especie") or 0),
-                hembras_silvestre=int(first.get("hembras_silvestre") or 0),
-                machos_silvestre=int(first.get("machos_silvestre") or 0),
-                hembras_esteril=int(first.get("hembras_esteril") or 0),
-                machos_esteril=int(first.get("machos_esteril") or 0),
+        idents_payload = [
+            IdentificacionPayload(
+                tipo_especie=int(x.get("tipo_especie") or 0),
+                hembras_silvestre=int(x.get("hembras_silvestre") or 0),
+                machos_silvestre=int(x.get("machos_silvestre") or 0),
+                hembras_esteril=int(x.get("hembras_esteril") or 0),
+                machos_esteril=int(x.get("machos_esteril") or 0),
             )
+            for x in ids
+        ]
         out.append(RevisionRow(
             folio=int(rd["folio"]),
             no_trampa=str(rd["no_trampa"] or "").strip(),
@@ -290,8 +295,7 @@ def listar_revisiones(
             numeroinscripcion=ni or None,
             tmimf_o_bloqueo=tmimf_o_folio is not None,
             tmimf_o_folio=tmimf_o_folio,
-            identificacion=ident_payload,
-            identificacion_multiple=len(ids) > 1,
+            identificaciones=idents_payload,
         ))
     return out
 
@@ -363,7 +367,7 @@ def actualizar_revision(
     session: Session = Depends(get_legacy_db),
     claims: dict = Depends(get_current_legacy_claims),
 ) -> PatchRevisionResult:
-    cambios_body = {k: v for k, v in body.model_dump(exclude={"identificacion"}).items() if v is not None}
+    cambios_body = {k: v for k, v in body.model_dump(exclude={"identificaciones"}).items() if v is not None}
 
     # 1. Cargar revisión actual
     before = session.execute(
@@ -423,11 +427,20 @@ def actualizar_revision(
     sale_de_2 = (actual_status == STATUS_REVISADA_CON_CAPTURA) and (nuevo_status != STATUS_REVISADA_CON_CAPTURA)
     se_mantiene_en_2 = (nuevo_status == STATUS_REVISADA_CON_CAPTURA) and (actual_status == STATUS_REVISADA_CON_CAPTURA)
 
-    if entra_a_2 and body.identificacion is None:
+    if entra_a_2 and not body.identificaciones:
         raise HTTPException(
             status_code=400,
-            detail="Cambiar a 'Revisada con captura' requiere capturar identificación (especie + conteos).",
+            detail="Cambiar a 'Revisada con captura' requiere capturar al menos una identificación (especie + conteos).",
         )
+
+    # Validación del set multi-especie: sin tipos repetidos.
+    if body.identificaciones:
+        tipos = [i.tipo_especie for i in body.identificaciones]
+        if len(tipos) != len(set(tipos)):
+            raise HTTPException(
+                status_code=400,
+                detail="No se puede repetir la misma especie en una sola revisión.",
+            )
 
     # 5. Ejecutar: UPDATE trampas_revision (si hay cambios)
     cambios_trampas_revision_aplicados: dict = {}
@@ -461,135 +474,87 @@ def actualizar_revision(
     ).mappings().all()
     ident_before_list = [dict(x) for x in ident_before]
 
+    # Estrategia unificada para identificacion: cada transición sale_de_2 /
+    # entra_a_2 / se_mantiene_en_2 implica "reemplazar el set". Siempre
+    # DELETE por folio_revision + INSERT N filas (N puede ser 0 si sale_de_2
+    # o si el caller manda identificaciones=[]).
+    #
+    # Se usa DELETE+INSERT en vez de UPDATE por id_identificacion porque esa
+    # columna solo existe en 5/8 BDs legacy (falta en CHP, GRO, OAX). El vínculo
+    # lógico `folio_revision` existe en todas.
     cambios_identificacion: dict = {"op": "noop"}
-    if sale_de_2 and ident_before_list:
-        # Eliminar todas las filas de identificación de esta revisión
-        session.execute(
-            text("DELETE FROM identificacion WHERE folio_revision = :folio"),
-            {"folio": folio},
-        )
-        session.commit()
-        cambios_identificacion = {
-            "op": "delete",
-            "borrados": len(ident_before_list),
-            "antes": ident_before_list,
-        }
 
-    elif entra_a_2:
-        # INSERT fresh
-        ident = body.identificacion  # type: ignore[union-attr]
-        assert ident is not None
-        ahora = datetime.now()
-        folio_tecnico_int = _to_int_or_none(folio_tecnico_ruta)
-        res = session.execute(
-            text("""
-                INSERT INTO identificacion
-                  (folio_revision, no_trampa, no_semana, tipo_especie,
-                   hembras_silvestre, machos_silvestre, hembras_esteril, machos_esteril,
-                   folio_tecnico, fecha, hora, usuario)
-                VALUES
-                  (:folio, :no_trampa, :no_semana, :tipo_especie,
-                   :hs, :ms, :he, :me,
-                   :ft, :fecha, :hora, :usuario)
-            """),
-            {
-                "folio": folio,
-                "no_trampa": before_d["no_trampa"],
-                "no_semana": before_d["no_semana"],
-                "tipo_especie": ident.tipo_especie,
-                "hs": ident.hembras_silvestre,
-                "ms": ident.machos_silvestre,
-                "he": ident.hembras_esteril,
-                "me": ident.machos_esteril,
-                "ft": folio_tecnico_int,
-                "fecha": ahora.date(),
-                "hora": ahora.time().replace(microsecond=0),
-                "usuario": (user_nick or "v3-admin")[:20],
-            },
-        )
-        session.commit()
-        cambios_identificacion = {"op": "insert", "despues": ident.model_dump(), "id": res.lastrowid}
+    def _nueva_list() -> list[IdentificacionPayload] | None:
+        """Lista objetivo. None = no se toca (no hay transición de status ni lista)."""
+        if sale_de_2:
+            return []
+        if entra_a_2:
+            return body.identificaciones or []
+        if se_mantiene_en_2 and body.identificaciones is not None:
+            return body.identificaciones
+        return None
 
-    elif se_mantiene_en_2 and body.identificacion is not None:
-        # DELETE + INSERT en lugar de UPDATE por id_identificacion: esa columna
-        # solo existe en 5 de 8 BDs legacy (falta en Chiapas, Guerrero, Oaxaca).
-        # Con DELETE por folio_revision (que SÍ existe en todas) + INSERT fresco,
-        # el flujo funciona idéntico en todas las BDs. La auditoría guarda
-        # el snapshot previo completo.
+    target = _nueva_list()
+    if target is not None:
+        # DELETE incondicional; si había filas van al audit trail.
         if ident_before_list:
-            first = ident_before_list[0]
-            ident = body.identificacion
             session.execute(
                 text("DELETE FROM identificacion WHERE folio_revision = :folio"),
                 {"folio": folio},
             )
-            ahora_upd = datetime.now()
-            folio_tecnico_int = _to_int_or_none(folio_tecnico_ruta)
-            res = session.execute(
-                text("""
-                    INSERT INTO identificacion
-                      (folio_revision, no_trampa, no_semana, tipo_especie,
-                       hembras_silvestre, machos_silvestre, hembras_esteril, machos_esteril,
-                       folio_tecnico, fecha, hora, usuario)
-                    VALUES
-                      (:folio, :no_trampa, :no_semana, :tipo_especie,
-                       :hs, :ms, :he, :me,
-                       :ft, :fecha, :hora, :usuario)
-                """),
-                {
-                    "folio": folio,
-                    "no_trampa": before_d["no_trampa"],
-                    "no_semana": before_d["no_semana"],
-                    "tipo_especie": ident.tipo_especie,
-                    "hs": ident.hembras_silvestre,
-                    "ms": ident.machos_silvestre,
-                    "he": ident.hembras_esteril,
-                    "me": ident.machos_esteril,
-                    "ft": folio_tecnico_int,
-                    "fecha": ahora_upd.date(),
-                    "hora": ahora_upd.time().replace(microsecond=0),
-                    "usuario": (user_nick or "v3-admin")[:20],
-                },
-            )
-            session.commit()
-            cambios_identificacion = {
-                "op": "update",
-                "antes": {k: first.get(k) for k in ("tipo_especie", "hembras_silvestre", "machos_silvestre", "hembras_esteril", "machos_esteril")},
-                "despues": ident.model_dump(),
-                "id": res.lastrowid,
-            }
-        else:
-            ident = body.identificacion
+        ids_insertados: list[int] = []
+        if target:
             ahora = datetime.now()
             folio_tecnico_int = _to_int_or_none(folio_tecnico_ruta)
-            res = session.execute(
-                text("""
-                    INSERT INTO identificacion
-                      (folio_revision, no_trampa, no_semana, tipo_especie,
-                       hembras_silvestre, machos_silvestre, hembras_esteril, machos_esteril,
-                       folio_tecnico, fecha, hora, usuario)
-                    VALUES
-                      (:folio, :no_trampa, :no_semana, :tipo_especie,
-                       :hs, :ms, :he, :me,
-                       :ft, :fecha, :hora, :usuario)
-                """),
-                {
-                    "folio": folio,
-                    "no_trampa": before_d["no_trampa"],
-                    "no_semana": before_d["no_semana"],
-                    "tipo_especie": ident.tipo_especie,
-                    "hs": ident.hembras_silvestre,
-                    "ms": ident.machos_silvestre,
-                    "he": ident.hembras_esteril,
-                    "me": ident.machos_esteril,
-                    "ft": folio_tecnico_int,
-                    "fecha": ahora.date(),
-                    "hora": ahora.time().replace(microsecond=0),
-                    "usuario": (user_nick or "v3-admin")[:20],
-                },
-            )
-            session.commit()
-            cambios_identificacion = {"op": "insert", "despues": ident.model_dump(), "id": res.lastrowid}
+            for ident in target:
+                res = session.execute(
+                    text("""
+                        INSERT INTO identificacion
+                          (folio_revision, no_trampa, no_semana, tipo_especie,
+                           hembras_silvestre, machos_silvestre, hembras_esteril, machos_esteril,
+                           folio_tecnico, fecha, hora, usuario)
+                        VALUES
+                          (:folio, :no_trampa, :no_semana, :tipo_especie,
+                           :hs, :ms, :he, :me,
+                           :ft, :fecha, :hora, :usuario)
+                    """),
+                    {
+                        "folio": folio,
+                        "no_trampa": before_d["no_trampa"],
+                        "no_semana": before_d["no_semana"],
+                        "tipo_especie": ident.tipo_especie,
+                        "hs": ident.hembras_silvestre,
+                        "ms": ident.machos_silvestre,
+                        "he": ident.hembras_esteril,
+                        "me": ident.machos_esteril,
+                        "ft": folio_tecnico_int,
+                        "fecha": ahora.date(),
+                        "hora": ahora.time().replace(microsecond=0),
+                        "usuario": (user_nick or "v3-admin")[:20],
+                    },
+                )
+                lastid = res.lastrowid
+                if lastid is not None:
+                    ids_insertados.append(lastid)
+        session.commit()
+
+        if not ident_before_list and target:
+            op = "insert"
+        elif ident_before_list and not target:
+            op = "delete"
+        elif ident_before_list and target:
+            op = "update"
+        else:
+            op = "noop"
+
+        if op != "noop":
+            cambios_identificacion = {
+                "op": op,
+                "antes": ident_before_list,
+                "despues": [i.model_dump() for i in target],
+                "ids": ids_insertados,
+                "borrados": len(ident_before_list),
+            }
 
     # 7. Auditoría — una entrada por tabla afectada
     estado_clave, db_name = _estado_clave_y_db(claims)
@@ -635,16 +600,16 @@ def actualizar_revision(
         """),
         {"folio": folio},
     ).mappings().all()
-    ident_payload = None
-    if ident_post:
-        first = ident_post[0]
-        ident_payload = IdentificacionPayload(
-            tipo_especie=int(first.get("tipo_especie") or 0),
-            hembras_silvestre=int(first.get("hembras_silvestre") or 0),
-            machos_silvestre=int(first.get("machos_silvestre") or 0),
-            hembras_esteril=int(first.get("hembras_esteril") or 0),
-            machos_esteril=int(first.get("machos_esteril") or 0),
+    idents_payload = [
+        IdentificacionPayload(
+            tipo_especie=int(x.get("tipo_especie") or 0),
+            hembras_silvestre=int(x.get("hembras_silvestre") or 0),
+            machos_silvestre=int(x.get("machos_silvestre") or 0),
+            hembras_esteril=int(x.get("hembras_esteril") or 0),
+            machos_esteril=int(x.get("machos_esteril") or 0),
         )
+        for x in ident_post
+    ]
 
     rev_out = RevisionRow(
         folio=int(post["folio"]),
@@ -659,8 +624,7 @@ def actualizar_revision(
         numeroinscripcion=numeroinscripcion,
         tmimf_o_bloqueo=False,
         tmimf_o_folio=None,
-        identificacion=ident_payload,
-        identificacion_multiple=len(ident_post) > 1,
+        identificaciones=idents_payload,
     )
     return PatchRevisionResult(
         folio=folio,
