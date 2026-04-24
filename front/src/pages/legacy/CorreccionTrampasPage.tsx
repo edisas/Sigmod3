@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Icon from '@/components/ui/Icon';
 import { useLegacyAuth } from '@/context/LegacyAuthContext';
 
@@ -65,6 +65,8 @@ export default function CorreccionTrampasPage() {
   const [toast, setToast]           = useState<Toast | null>(null);
 
   // ── Carga inicial ──────────────────────────────────────
+  // Patrón legítimo de "cargar en mount/cambio de token"; la regla v6
+  // sobre-marca setState síncronos en useEffect.
   useEffect(() => {
     if (!token) return;
     (async () => {
@@ -82,7 +84,9 @@ export default function CorreccionTrampasPage() {
   }, [token]);
 
   // Rutas al cambiar PFA
+  // Reset + carga al cambiar PFA; la regla v6 sobre-marca setState síncronos.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!token || pfaId === null) { setRutas([]); setRutaId(null); setTrampas([]); return; }
     (async () => {
       const res = await fetch(`${API_BASE}/legacy/correcciones/rutas-por-pfa?pfa=${pfaId}`, {
@@ -93,7 +97,7 @@ export default function CorreccionTrampasPage() {
   }, [token, pfaId]);
 
   // Trampas al cambiar ruta
-  const cargarTrampas = async () => {
+  const cargarTrampas = useCallback(async () => {
     if (!token || rutaId === null) return;
     setCargandoTr(true);
     setEditingFolio(null); setDraft(null);
@@ -106,8 +110,10 @@ export default function CorreccionTrampasPage() {
     } catch (e) {
       setToast({ kind: 'err', text: e instanceof Error ? e.message : 'Error' });
     } finally { setCargandoTr(false); }
-  };
-  useEffect(() => { void cargarTrampas(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [rutaId]);
+  }, [token, rutaId]);
+  // Carga al cambiar ruta; la regla v6 sobre-marca setState síncronos.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void cargarTrampas(); }, [cargarTrampas]);
 
   // ── Edición inline ─────────────────────────────────────
   const startEdit = (t: TrampaRow) => {

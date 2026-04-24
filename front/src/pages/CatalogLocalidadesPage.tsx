@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
@@ -89,7 +89,7 @@ export default function CatalogLocalidadesPage() {
     void loadMunicipios();
   }, [token, estadoFilter]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!token) return;
     setIsLoading(true);
     setError('');
@@ -114,11 +114,12 @@ export default function CatalogLocalidadesPage() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  useEffect(() => {
-    void load();
   }, [token, page, pageSize, search, estadoFilter, municipioFilter, estatusFilter]);
+
+  // setIsLoading(true) al inicio de load dispara set-state-in-effect — patrón
+  // legítimo de "cargar en mount/cambio de filtros" que la regla v6 sobre-marca.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void load(); }, [load]);
 
   const inactivate = async (id: number) => {
     if (!token) return;

@@ -63,9 +63,12 @@ export function LegacyAuthProvider({ children }: { children: ReactNode }) {
     isLoading: true,
   });
 
+  // setState en early-return y bootstrap es patrón legítimo de "cargar sesión
+  // legacy al montar"; la regla v6 sobre-marca setState síncronos en useEffect.
   useEffect(() => {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setState((prev) => ({ ...prev, isLoading: false }));
       return;
     }

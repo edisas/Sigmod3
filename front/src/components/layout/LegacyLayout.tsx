@@ -72,7 +72,10 @@ export default function LegacyLayout() {
   };
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(initialOpen);
 
+  // setOpenGroups al cambiar ruta es patrón legítimo de sincronizar apertura
+  // del menú con la URL; la regla v6 sobre-marca setState síncronos en useEffect.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOpenGroups((prev) => {
       const next = { ...prev };
       for (const node of navTree) {

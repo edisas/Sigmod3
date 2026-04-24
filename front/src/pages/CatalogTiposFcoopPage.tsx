@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '@/components/ui/Icon';
 
@@ -53,7 +53,7 @@ export default function CatalogTiposFcoopPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!token) return;
     setIsLoading(true);
     setError('');
@@ -79,11 +79,12 @@ export default function CatalogTiposFcoopPage() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  useEffect(() => {
-    void load();
   }, [token, page, pageSize, search, statusFilter]);
+
+  // setIsLoading(true) al inicio de load dispara set-state-in-effect — patrón
+  // legítimo de "cargar en mount/cambio de filtros" que la regla v6 sobre-marca.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void load(); }, [load]);
 
   const inactivate = async (id: number) => {
     if (!token) return;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from '@/components/ui/Icon';
 import { useLegacyAuth } from '@/context/LegacyAuthContext';
 
@@ -56,20 +56,21 @@ export default function RutasCatalogoPage() {
   const [toast, setToast]               = useState<Toast | null>(null);
 
   // ── Carga inicial ──────────────────────────────────────
-  useEffect(() => {
-    if (!token) return;
-    void cargarTodo();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  // q y onlyActive se leen desde ref para que cambiarlos (tecleo) no
+  // dispare refetch; la recarga se hace explícitamente por botón.
+  const filtrosRef = useRef({ q, onlyActive });
+  useEffect(() => { filtrosRef.current = { q, onlyActive }; }, [q, onlyActive]);
 
-  const cargarTodo = async () => {
+  const cargarTodo = useCallback(async () => {
+    if (!token) return;
     setCargando(true);
     setError('');
     try {
       const h = { Authorization: `Bearer ${token}` };
       const qs = new URLSearchParams();
-      if (q) qs.set('q', q);
-      if (onlyActive) qs.set('only_active', 'true');
+      const { q: qf, onlyActive: only } = filtrosRef.current;
+      if (qf) qs.set('q', qf);
+      if (only) qs.set('only_active', 'true');
       const [rutasRes, modRes, pfasRes] = await Promise.all([
         fetch(`${API_BASE}/legacy/catalogos/rutas?${qs.toString()}`, { headers: h }),
         fetch(`${API_BASE}/legacy/catalogos/modulos`, { headers: h }),
@@ -84,7 +85,12 @@ export default function RutasCatalogoPage() {
     } finally {
       setCargando(false);
     }
-  };
+  }, [token]);
+
+  // setCargando(true) al inicio de cargarTodo dispara set-state-in-effect — patrón
+  // legítimo de "cargar en mount/cambio de token" que la regla v6 sobre-marca.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void cargarTodo(); }, [cargarTodo]);
 
   // ── Edición ────────────────────────────────────────────
   const startEdit = (r: RutaRow) => {

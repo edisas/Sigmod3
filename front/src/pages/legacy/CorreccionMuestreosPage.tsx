@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Icon from '@/components/ui/Icon';
 import { useLegacyAuth } from '@/context/LegacyAuthContext';
 
@@ -104,6 +104,8 @@ export default function CorreccionMuestreosPage() {
   const [confirmMercado, setConfirmMercado] = useState<{ preview: PreviewMercado; onConfirm: () => void } | null>(null);
 
   // ── Carga inicial ──────────────────────────────────────
+  // Patrón legítimo de "cargar en mount/cambio de token"; la regla v6
+  // sobre-marca setState síncronos en useEffect.
   useEffect(() => {
     if (!token) return;
     (async () => {
@@ -120,7 +122,9 @@ export default function CorreccionMuestreosPage() {
     })();
   }, [token]);
 
+  // Reset + carga al cambiar PFA; la regla v6 sobre-marca setState síncronos.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!token || pfaId === null) { setRutas([]); setRutaId(null); setSemanas([]); setSemana(null); setTmimfs([]); return; }
     (async () => {
       const res = await fetch(`${API_BASE}/legacy/correcciones/rutas-por-pfa?pfa=${pfaId}`, {
@@ -130,7 +134,9 @@ export default function CorreccionMuestreosPage() {
     })();
   }, [token, pfaId]);
 
+  // Reset + carga al cambiar ruta; la regla v6 sobre-marca setState síncronos.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!token || rutaId === null) { setSemanas([]); setSemana(null); setTmimfs([]); return; }
     (async () => {
       const res = await fetch(`${API_BASE}/legacy/correcciones/muestreo/semanas-con-tmimf-o?ruta=${rutaId}`, {
@@ -140,7 +146,7 @@ export default function CorreccionMuestreosPage() {
     })();
   }, [token, rutaId]);
 
-  const cargarTmimfs = async () => {
+  const cargarTmimfs = useCallback(async () => {
     if (!token || rutaId === null || semana === null) return;
     setCargandoTm(true);
     setExpandedFolio(null); setDetalle(null); setDraft(null);
@@ -153,8 +159,10 @@ export default function CorreccionMuestreosPage() {
     } catch (e) {
       setToast({ kind: 'err', text: e instanceof Error ? e.message : 'Error' });
     } finally { setCargandoTm(false); }
-  };
-  useEffect(() => { void cargarTmimfs(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [semana]);
+  }, [token, rutaId, semana]);
+  // Carga al cambiar semana; la regla v6 sobre-marca setState síncronos.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void cargarTmimfs(); }, [cargarTmimfs]);
 
   // ── Expand / colapsar ──────────────────────────────────
   const tmimfKey = (t: TmimfOperativa) => `${t.folio_tmimf}|${t.clave_movilizacion}`;

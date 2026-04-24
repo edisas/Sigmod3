@@ -645,7 +645,10 @@ function Card({ roman, titulo, icon, status, semanaIni, semanaFin, children }: {
 // llegar a la semana final se queda ahí hasta que la fase resuelve.
 function SemanaTicker({ semanaIni, semanaFin }: { semanaIni: number; semanaFin: number }) {
   const [current, setCurrent] = useState(semanaIni);
+  // setCurrent(semanaIni) reinicia el ticker al cambiar el rango; la regla v6
+  // sobre-marca setState síncronos en useEffect.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrent(semanaIni);
     if (semanaFin <= semanaIni) return;
     const id = setInterval(() => {

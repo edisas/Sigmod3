@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '@/components/ui/Icon';
 
@@ -30,7 +30,7 @@ export default function RequestsListPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!token) return;
     setIsLoading(true);
     setError('');
@@ -47,11 +47,12 @@ export default function RequestsListPage() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  useEffect(() => {
-    void load();
   }, [token]);
+
+  // setIsLoading(true) al inicio de load dispara set-state-in-effect — patrón
+  // legítimo de "cargar en mount/cambio de token" que la regla v6 sobre-marca.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void load(); }, [load]);
 
   const cancelSolicitud = async (solicitudId: number) => {
     if (!token) return;

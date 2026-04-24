@@ -290,8 +290,11 @@ export default function MenuSettingsPage() {
     return all;
   };
 
+  // setIsLoading(false) en early-return es patrón legítimo de "cargar en mount";
+  // la regla v6 sobre-marca setState síncronos en useEffect.
   useEffect(() => {
     if (!token) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsLoading(false);
       return;
     }

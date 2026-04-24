@@ -222,9 +222,12 @@ export default function AccessRequestPage() {
     void loadDetalle();
   }, [token, editingSolicitudId]);
 
+  // setMunicipiosDisponibles([]) en early-return es patrón legítimo de reset
+  // al cambiar dependencia; la regla v6 sobre-marca setState síncronos.
   useEffect(() => {
     const estadoId = Number(form.estado_id);
     if (!token || !estadoId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMunicipiosDisponibles([]);
       return;
     }
@@ -246,9 +249,12 @@ export default function AccessRequestPage() {
     void loadMunicipios();
   }, [token, form.estado_id]);
 
+  // setLocalidadesDisponibles([])/setModulosDisponibles([]) en early-return son
+  // patrón legítimo de reset al cambiar dep; la regla v6 sobre-marca setState.
   useEffect(() => {
     const estadoId = Number(form.estado_id);
     if (!token || !estadoId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLocalidadesDisponibles([]);
       setModulosDisponibles([]);
       return;

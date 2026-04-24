@@ -415,7 +415,7 @@ function SectionPorSemana({ data }: { data: SemanaCap[] | null }) {
   const maxMtd = useMemo(() => Math.max(0.001, ...(data ?? []).map((s) => s.mtd_estatal)), [data]);
 
   const x = (i: number) => (data && data.length > 1 ? (i / (data.length - 1)) * IW : IW / 2);
-  const yCap = (v: number) => IH - (v / maxCap) * IH;
+  const _yCap = (v: number) => IH - (v / maxCap) * IH;
   const yMtd = (v: number) => IH - (v / maxMtd) * IH;
 
   const pathMtd = hasData

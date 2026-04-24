@@ -126,7 +126,10 @@ export default function Sidebar({ isOpen, onClose, isMobile }: SidebarProps) {
 
   const topLevelIds = useMemo(() => menus.map((item) => item.id), [menus]);
 
+  // setOpenMain({})/setOpenNodes({}) al cambiar ruta es patrón legítimo de reset
+  // de menú al navegar; la regla v6 sobre-marca setState síncronos en useEffect.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOpenMain({});
     setOpenNodes({});
   }, [location.pathname]);

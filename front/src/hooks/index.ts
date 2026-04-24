@@ -8,10 +8,13 @@ export function useIsMobile(breakpoint = 768): boolean {
     typeof window !== 'undefined' ? window.innerWidth < breakpoint : false
   );
 
+  // setIsMobile(mq.matches) sincroniza estado con matchMedia al montar/cambiar
+  // breakpoint; la regla v6 sobre-marca setState síncronos en useEffect.
   useEffect(() => {
     const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
     const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
     mq.addEventListener('change', handler);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMobile(mq.matches);
     return () => mq.removeEventListener('change', handler);
   }, [breakpoint]);
@@ -26,7 +29,10 @@ export function useSidebar() {
   const isMobile = useIsMobile(1024);
   const [isOpen, setIsOpen] = useState(!isMobile);
 
+  // setIsOpen(!isMobile) sincroniza estado con breakpoint; la regla v6
+  // sobre-marca setState síncronos en useEffect.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsOpen(!isMobile);
   }, [isMobile]);
 

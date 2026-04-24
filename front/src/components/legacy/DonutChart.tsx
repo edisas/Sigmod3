@@ -21,7 +21,6 @@ const formatTon = (n: number): string =>
 
 export default function DonutChart({ segments, centerLabel, centerValue }: Props) {
   const total = segments.reduce((acc, s) => acc + s.value, 0);
-  let offset = 0;
 
   if (total === 0) {
     return (
@@ -47,9 +46,13 @@ export default function DonutChart({ segments, centerLabel, centerValue }: Props
             strokeWidth={STROKE}
             className="stroke-slate-100 dark:stroke-slate-800"
           />
-          {segments.map((s) => {
-            const len = (s.value / total) * CIRCUMFERENCE;
-            const circle = (
+          {(() => {
+            const lens = segments.map((s) => (s.value / total) * CIRCUMFERENCE);
+            const offsets = lens.reduce<number[]>((acc, len, i) => {
+              acc.push(i === 0 ? 0 : acc[i - 1] + lens[i - 1]);
+              return acc;
+            }, []);
+            return segments.map((s, i) => (
               <circle
                 key={s.label}
                 cx={SIZE / 2}
@@ -58,14 +61,12 @@ export default function DonutChart({ segments, centerLabel, centerValue }: Props
                 fill="none"
                 strokeWidth={STROKE}
                 stroke={s.color}
-                strokeDasharray={`${len} ${CIRCUMFERENCE - len}`}
-                strokeDashoffset={-offset}
+                strokeDasharray={`${lens[i]} ${CIRCUMFERENCE - lens[i]}`}
+                strokeDashoffset={-offsets[i]}
                 strokeLinecap="butt"
               />
-            );
-            offset += len;
-            return circle;
-          })}
+            ));
+          })()}
         </svg>
         {(centerLabel || centerValue) && (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center">

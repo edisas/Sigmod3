@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
 const TOKEN_KEY = 'sigmod_token';
@@ -72,7 +72,7 @@ export default function FiguraCooperadoraAutorizacionPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const loadCatalogos = async () => {
+  const loadCatalogos = useCallback(async () => {
     if (!token) return;
     const response = await fetch(`${API_BASE}/autorizaciones/figura-cooperadora/catalogos`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -80,9 +80,9 @@ export default function FiguraCooperadoraAutorizacionPage() {
     if (!response.ok) throw new Error(`Catalogos HTTP ${response.status}`);
     const data = (await response.json()) as CatalogosResponse;
     setCatalogos(data);
-  };
+  }, [token]);
 
-  const loadListado = async () => {
+  const loadListado = useCallback(async () => {
     if (!token) return;
     const response = await fetch(`${API_BASE}/autorizaciones/figura-cooperadora/listado`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -90,7 +90,7 @@ export default function FiguraCooperadoraAutorizacionPage() {
     if (!response.ok) throw new Error(`Listado HTTP ${response.status}`);
     const data = (await response.json()) as AutorizacionListItem[];
     setAutorizaciones(data);
-  };
+  }, [token]);
 
   useEffect(() => {
     const bootstrap = async () => {
@@ -108,7 +108,7 @@ export default function FiguraCooperadoraAutorizacionPage() {
     };
 
     void bootstrap();
-  }, [token]);
+  }, [token, loadCatalogos, loadListado]);
 
   const toggleEstado = (estadoId: number) => {
     setEstadoIds((prev) => (prev.includes(estadoId) ? prev.filter((id) => id !== estadoId) : [...prev, estadoId]));

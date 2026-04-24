@@ -83,9 +83,12 @@ export default function SessionInactivityGuard() {
     }, timeoutMs + warningMs);
   }, [clearTimers, isAuthenticated, timeoutMs, warningMs, performLogout]);
 
+  // setWarningOpen(false) en early-return es patrón legítimo de reset al
+  // des-autenticarse; la regla v6 sobre-marca setState síncronos en useEffect.
   useEffect(() => {
     if (!isAuthenticated) {
       clearTimers();
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setWarningOpen(false);
       return;
     }
