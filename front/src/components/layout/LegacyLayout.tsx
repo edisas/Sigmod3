@@ -41,6 +41,7 @@ const navTree: NavNode[] = [
       { to: '/legacy/correcciones/revisiones-trampas', icon: 'track_changes', label: 'Revisiones de trampas' },
       { to: '/legacy/correcciones/trampas',            icon: 'bug_report',    label: 'Trampas' },
       { to: '/legacy/correcciones/muestreos',          icon: 'science',       label: 'Muestreos' },
+      { to: '/legacy/correcciones/tmimf-o-faltantes',  icon: 'report_problem',label: 'TMIMFs O faltantes' },
     ],
   },
   {
