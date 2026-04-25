@@ -25,6 +25,7 @@ const InformesSemanalesEstadoPage = lazy(() => import('@/pages/legacy/InformesSe
 const ResumenDiarioModulosPage = lazy(() => import('@/pages/legacy/ResumenDiarioModulosPage'));
 const EstimadoCosechaPfaPage = lazy(() => import('@/pages/legacy/EstimadoCosechaPfaPage'));
 const DocumentosPorFechaPage = lazy(() => import('@/pages/legacy/DocumentosPorFechaPage'));
+const DetalladoMovilizacionPage = lazy(() => import('@/pages/legacy/DetalladoMovilizacionPage'));
 
 export const legacyPublicRoutes = [
   <Route key="legacy-login" path="/legacy/login" element={<LegacyLoginPage />} />,
@@ -57,5 +58,6 @@ export const legacyProtectedRoutes = (
     <Route path="/legacy/reportes/resumen-diario-modulos" element={<ResumenDiarioModulosPage />} />
     <Route path="/legacy/reportes/estimado-cosecha-pfa" element={<EstimadoCosechaPfaPage />} />
     <Route path="/legacy/reportes/documentos-por-fecha" element={<DocumentosPorFechaPage />} />
+    <Route path="/legacy/reportes/detallado-movilizacion" element={<DetalladoMovilizacionPage />} />
   </Route>
 );

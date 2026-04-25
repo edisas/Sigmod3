@@ -60,6 +60,7 @@ const navTree: NavNode[] = [
       { to: '/legacy/reportes/resumen-diario-modulos', icon: 'today', label: 'Resumen diario por módulo' },
       { to: '/legacy/reportes/estimado-cosecha-pfa', icon: 'eco', label: 'Estimado de cosecha por PFA' },
       { to: '/legacy/reportes/documentos-por-fecha', icon: 'description', label: 'Documentos por fecha (COPREF/recibos)' },
+      { to: '/legacy/reportes/detallado-movilizacion', icon: 'search', label: 'Buscar TMIMF (detallado)' },
     ],
   },
 ];

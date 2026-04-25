@@ -303,3 +303,141 @@ def modulos_emisores(
         ModuloSelect(folio=int(r["folio"]), nombre_modulo=str(r["nombre_modulo"] or "").strip())
         for r in rows
     ]
+
+
+# ──────────────────────────────────────────────────────────────────────
+# GET /detallado-movilizacion — búsqueda por folio TMIMF (zoom-in)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class DetalladoMovilizacionResponse(BaseModel):
+    encontrado: bool
+    cabecera: TmimfEmitidaRow | None
+    detallado: list[DetalladoRow]
+
+
+@router.get("/detallado-movilizacion", response_model=DetalladoMovilizacionResponse)
+def detallado_movilizacion(
+    folio_tmimf: str = Query(..., min_length=1, description="Folio completo de la TMIMF"),
+    session: Session = Depends(get_legacy_db),
+    _claims: dict = Depends(get_current_legacy_claims),
+) -> DetalladoMovilizacionResponse:
+    """Búsqueda zoom-in por folio TMIMF: cabecera + todos los renglones.
+
+    Reemplaza el placeholder `detallado_de_movilizacion.php` que en el legacy
+    nunca se implementó. Útil para auditoría puntual cuando ya se tiene un
+    folio en mano (ej. desde un COPREF, recibo, queja, etc.).
+
+    Las TMIMFs tipo 'I' (Inválidas) NO se devuelven — regla global.
+    """
+    folio = folio_tmimf.strip()
+    cab = session.execute(
+        text("""
+            SELECT
+                tmi.folio_tmimf,
+                tmi.status,
+                tmi.tipo_tarjeta,
+                tmi.mercado_destino,
+                tmi.numeroinscripcion,
+                sv.nombre_propietario,
+                sv.nombre_unidad,
+                tmi.fecha_emision,
+                tmi.hora_emision,
+                tmi.fecha_verifico_normex,
+                tmi.clave_aprobado AS pfa_folio,
+                fun.nombre         AS pfa_nombre,
+                fun.cedula         AS pfa_cedula,
+                usu.nombre         AS usuario_generador_nombre,
+                tmi.modulo_emisor  AS modulo_emisor_folio,
+                cm.nombre_modulo   AS modulo_emisor_nombre,
+                tmi.semana
+            FROM tmimf tmi
+            LEFT JOIN sv01_sv02        sv  ON sv.numeroinscripcion = tmi.numeroinscripcion
+            LEFT JOIN cat_funcionarios fun ON fun.folio = tmi.clave_aprobado
+            LEFT JOIN usuarios         usu ON usu.clave = tmi.usuario_generador
+            LEFT JOIN cat_modulos      cm  ON cm.folio = tmi.modulo_emisor
+            WHERE tmi.folio_tmimf = :f
+              AND (tmi.tipo_tarjeta IS NULL OR tmi.tipo_tarjeta <> 'I')
+            LIMIT 1
+        """),
+        {"f": folio},
+    ).mappings().first()
+
+    if not cab:
+        return DetalladoMovilizacionResponse(encontrado=False, cabecera=None, detallado=[])
+
+    # `granel` falta en CHP/OAX — detección dinámica.
+    tiene_granel = session.execute(
+        text("""
+            SELECT COUNT(*) FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'detallado_tmimf'
+              AND column_name = 'granel'
+        """),
+    ).scalar() or 0
+    granel_expr = "d.granel" if tiene_granel else "0"
+
+    det_rows = session.execute(
+        text(f"""
+            SELECT
+                d.folio,
+                d.sub_folio,
+                d.cantidad_movilizada,
+                d.variedad_movilizada AS variedad_folio,
+                v.descripcion         AS variedad_nombre,
+                d.tipo_vehiculo,
+                d.placas,
+                d.saldo,
+                {granel_expr}         AS granel,
+                d.cajas14, d.cajas15, d.cajas16, d.cajas18, d.cajas20, d.cajas25, d.cajas30,
+                d.status
+            FROM detallado_tmimf d
+            LEFT JOIN cat_variedades v ON v.folio = d.variedad_movilizada
+            WHERE d.folio_completo = :f
+            ORDER BY d.folio ASC
+        """),
+        {"f": folio},
+    ).mappings().all()
+
+    detallado: list[DetalladoRow] = []
+    for dr in det_rows:
+        cajas_total = sum(
+            int(dr[c] or 0)
+            for c in ("cajas14", "cajas15", "cajas16", "cajas18", "cajas20", "cajas25", "cajas30")
+        )
+        detallado.append(DetalladoRow(
+            folio=int(dr["folio"]),
+            sub_folio=(str(dr["sub_folio"]).strip() if dr["sub_folio"] is not None else None),
+            cantidad_movilizada=float(dr["cantidad_movilizada"] or 0),
+            variedad_folio=int(dr["variedad_folio"]) if dr["variedad_folio"] else None,
+            variedad_nombre=(str(dr["variedad_nombre"]).strip() if dr["variedad_nombre"] else None),
+            tipo_vehiculo=(str(dr["tipo_vehiculo"]).strip() if dr["tipo_vehiculo"] else None),
+            placas=(str(dr["placas"]).strip() if dr["placas"] else None),
+            saldo=float(dr["saldo"] or 0),
+            cajas_total=cajas_total,
+            granel=float(dr["granel"] or 0),
+            status=(str(dr["status"]).strip() if dr["status"] else None),
+        ))
+
+    cabecera = TmimfEmitidaRow(
+        folio_tmimf=str(cab["folio_tmimf"]).strip(),
+        status=(str(cab["status"]).strip() if cab["status"] else None),
+        tipo_tarjeta=(str(cab["tipo_tarjeta"]).strip() if cab["tipo_tarjeta"] else None),
+        mercado_destino=int(cab["mercado_destino"]) if cab["mercado_destino"] else None,
+        numeroinscripcion=str(cab["numeroinscripcion"] or "").strip(),
+        nombre_propietario=(str(cab["nombre_propietario"]).strip() if cab["nombre_propietario"] else None),
+        nombre_unidad=(str(cab["nombre_unidad"]).strip() if cab["nombre_unidad"] else None),
+        fecha_emision=cab.get("fecha_emision"),
+        hora_emision=(str(cab["hora_emision"]).strip() if cab["hora_emision"] else None),
+        fecha_verifico_normex=cab.get("fecha_verifico_normex"),
+        pfa_folio=int(cab["pfa_folio"]) if cab["pfa_folio"] else None,
+        pfa_nombre=(str(cab["pfa_nombre"]).strip() if cab["pfa_nombre"] else None),
+        pfa_cedula=(str(cab["pfa_cedula"]).strip() if cab["pfa_cedula"] else None),
+        usuario_generador_nombre=(str(cab["usuario_generador_nombre"]).strip() if cab["usuario_generador_nombre"] else None),
+        modulo_emisor_folio=int(cab["modulo_emisor_folio"]) if cab["modulo_emisor_folio"] else None,
+        modulo_emisor_nombre=(str(cab["modulo_emisor_nombre"]).strip() if cab["modulo_emisor_nombre"] else None),
+        semana=int(cab["semana"]) if cab["semana"] not in (None, "") else None,
+        detallado=None,
+    )
+
+    return DetalladoMovilizacionResponse(encontrado=True, cabecera=cabecera, detallado=detallado)
