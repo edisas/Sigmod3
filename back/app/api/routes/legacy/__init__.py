@@ -11,6 +11,7 @@ from app.api.routes.legacy import (
     dashboard_trampeos,
     informe_general,
     reportes,
+    reportes_inventario,
     reportes_tmimf,
 )
 
@@ -28,5 +29,6 @@ router.include_router(correcciones.router, prefix="/correcciones", tags=["legacy
 router.include_router(correcciones_muestreo.router, prefix="/correcciones/muestreo", tags=["legacy-correcciones-muestreo"])
 router.include_router(correcciones_tmimf_o.router, prefix="/correcciones/tmimf-o", tags=["legacy-correcciones-tmimf-o"])
 router.include_router(reportes_tmimf.router, prefix="/reportes/tmimf", tags=["legacy-reportes-tmimf"])
+router.include_router(reportes_inventario.router, prefix="/reportes/inventario-pfa", tags=["legacy-reportes-inventario"])
 router.include_router(dashboard_trampeos.router, prefix="/dashboard-trampeos", tags=["legacy-dashboard-trampeos"])
 router.include_router(dashboard_muestreo.router, prefix="/dashboard-muestreo", tags=["legacy-dashboard-muestreo"])

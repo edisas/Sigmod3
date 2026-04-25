@@ -54,6 +54,7 @@ const navTree: NavNode[] = [
       { to: '/legacy/reportes/huertos-por-pfa', icon: 'badge', label: 'Huertos por PFA' },
       { to: '/legacy/reportes/informe-general-pfa', icon: 'assessment', label: 'Informe general por PFA' },
       { to: '/legacy/reportes/tmimfs-emitidas', icon: 'receipt_long', label: 'TMIMFs emitidas por fecha' },
+      { to: '/legacy/reportes/inventario-por-pfa', icon: 'assignment', label: 'Inventario por PFA' },
     ],
   },
 ];
