@@ -1,17 +1,29 @@
 """
 Reportes legacy: Informes semanales SAGARPA (Grupo C).
 
-Reportes oficiales que se entregan a SENASICA por (PFA × ruta × semana).
-Cada informe agrega indicadores operativos + identificación + técnicos
-sobre el universo de trampas/revisiones de esa ruta en esa semana.
+Reportes oficiales que se entregan a SENASICA. Cada uno agrega registros de
+una semana epidemiológica filtrando por `no_semana`.
 
 Endpoints implementados:
-- GET /trampeo  — equivalente a `informe_semanal_trampeo_generar.php`.
+- GET /trampeo               — por (PFA × ruta × semana). Replica `informe_semanal_trampeo_generar.php`.
+- GET /control-quimico       — por semana, lista de aplicaciones químicas (`control_quimico`).
+- GET /control-cultural      — por semana, lista de podas/derribos (`control_mecanico_cultural`).
+- GET /muestreo-frutos       — por semana, lista de muestreos (`muestreo_de_frutos`).
+- GET /semanas-disponibles   — selector compartido de semanas con datos.
 
 Selectores se reusan de otros routers existentes:
 - PFAs con rutas: `/legacy/reportes/inventario-pfa/pfas`
 - Rutas por PFA: `/legacy/correcciones/rutas-por-pfa`
 - Semanas con revisiones: `/legacy/correcciones/semanas-por-ruta`
+
+Reportes del PHP legacy NO migrables (tablas inexistentes en las 8 BDs):
+- `informe_semanal_cursos` (tabla `capacitacion`).
+- `informe_semanal_divulgacion` (tabla `divulgacion`).
+- `informe_semanal_platicas_fitosanitarias` (tabla `capacitacion`).
+
+Convención de localidad: el PHP joinea con `localidades.CLAVE_LOCALIDAD`
+pero esa tabla está vacía. En su lugar se devuelve `sv01_sv02.municipio`
+(el nombre del municipio del huerto correspondiente).
 
 Notas técnicas:
 - `trampas_revision.no_trampa` y `trampas.no_trampa` son VARCHAR (no FK por
@@ -276,4 +288,324 @@ def informe_semanal_trampeo(
         operativos=operativos,
         capturas=capturas,
         tecnicos=tecnicos,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# GET /semanas-disponibles — selector común para los reportes por estado
+# ──────────────────────────────────────────────────────────────────────
+
+
+class SemanaOption(BaseModel):
+    folio: int
+    no_semana: int | None
+    periodo: int | None
+    fecha_inicio: date | None
+    fecha_final: date | None
+    label: str
+
+
+@router.get("/semanas-disponibles", response_model=list[SemanaOption])
+def semanas_disponibles(
+    session: Session = Depends(get_legacy_db),
+    _claims: dict = Depends(get_current_legacy_claims),
+) -> list[SemanaOption]:
+    """Semanas que tienen datos en al menos uno de los 3 reportes (control_quimico,
+    control_mecanico_cultural, muestreo_de_frutos)."""
+    rows = session.execute(text("""
+        SELECT s.folio, s.no_semana, s.periodo, s.fecha_inicio, s.fecha_final
+        FROM semanas s
+        WHERE s.folio IN (
+            SELECT DISTINCT no_semana FROM control_quimico WHERE no_semana > 0
+            UNION SELECT DISTINCT no_semana FROM control_mecanico_cultural WHERE no_semana > 0
+            UNION SELECT DISTINCT no_semana FROM muestreo_de_frutos WHERE no_semana > 0
+        )
+        ORDER BY s.folio DESC
+        LIMIT 104
+    """)).mappings().all()
+    out: list[SemanaOption] = []
+    for r in rows:
+        nsa = r["no_semana"]
+        per = r["periodo"]
+        label = f"{int(nsa)} - {int(per)}" if (nsa is not None and per is not None) else f"sem {int(r['folio'])}"
+        out.append(SemanaOption(
+            folio=int(r["folio"]),
+            no_semana=int(nsa) if nsa is not None else None,
+            periodo=int(per) if per is not None else None,
+            fecha_inicio=r["fecha_inicio"],
+            fecha_final=r["fecha_final"],
+            label=label,
+        ))
+    return out
+
+
+# ──────────────────────────────────────────────────────────────────────
+# GET /control-quimico
+# ──────────────────────────────────────────────────────────────────────
+
+
+class ControlQuimicoRow(BaseModel):
+    folio: int
+    fecha_aplicacion: date | None
+    numeroinscripcion: str | None
+    propietario: str | None
+    municipio: str | None
+    tipo_aplicacion_nombre: str | None
+    superficie: float
+    estaciones_cebo: int
+    proteina_lts: float
+    malathion_lts: float
+    agua_lts: float
+    observaciones: str | None
+
+
+class ControlQuimicoResponse(BaseModel):
+    semana: SemanaOption
+    rows: list[ControlQuimicoRow]
+    totales: dict   # {superficie, estaciones_cebo, proteina_lts, malathion_lts, agua_lts}
+
+
+@router.get("/control-quimico", response_model=ControlQuimicoResponse)
+def control_quimico_semanal(
+    semana: int = Query(..., ge=1, description="Folio de la semana"),
+    session: Session = Depends(get_legacy_db),
+    _claims: dict = Depends(get_current_legacy_claims),
+) -> ControlQuimicoResponse:
+    sem_opt = _resolve_semana(session, semana)
+
+    rows = session.execute(
+        text("""
+            SELECT cq.folio, cq.fecha_aplicacion,
+                   TRIM(cq.numeroinscripcion) AS numeroinscripcion,
+                   sv.nombre_propietario AS propietario,
+                   sv.municipio          AS municipio,
+                   ta.nombre             AS tipo_aplicacion_nombre,
+                   cq.superficie, cq.estaciones_cebo,
+                   cq.proteina_lts, cq.malathion_lts, cq.agua_lts,
+                   cq.observaciones
+            FROM control_quimico cq
+            LEFT JOIN sv01_sv02 sv ON sv.numeroinscripcion = cq.numeroinscripcion
+            LEFT JOIN cat_tipos_aplicacion ta ON ta.folio = cq.tipo_aplicacion
+            WHERE cq.no_semana = :s
+            ORDER BY cq.fecha_aplicacion ASC, cq.folio ASC
+        """),
+        {"s": semana},
+    ).mappings().all()
+
+    out: list[ControlQuimicoRow] = []
+    tot = {"superficie": 0.0, "estaciones_cebo": 0,
+           "proteina_lts": 0.0, "malathion_lts": 0.0, "agua_lts": 0.0}
+    for r in rows:
+        sup = float(r["superficie"] or 0)
+        est = int(r["estaciones_cebo"] or 0)
+        pro = float(r["proteina_lts"] or 0)
+        mal = float(r["malathion_lts"] or 0)
+        agu = float(r["agua_lts"] or 0)
+        tot["superficie"] += sup
+        tot["estaciones_cebo"] += est
+        tot["proteina_lts"] += pro
+        tot["malathion_lts"] += mal
+        tot["agua_lts"] += agu
+        out.append(ControlQuimicoRow(
+            folio=int(r["folio"]),
+            fecha_aplicacion=r["fecha_aplicacion"],
+            numeroinscripcion=str(r["numeroinscripcion"] or "").strip() or None,
+            propietario=(str(r["propietario"]).strip() if r["propietario"] else None),
+            municipio=(str(r["municipio"]).strip() if r["municipio"] else None),
+            tipo_aplicacion_nombre=(str(r["tipo_aplicacion_nombre"]).strip() if r["tipo_aplicacion_nombre"] else None),
+            superficie=sup, estaciones_cebo=est,
+            proteina_lts=pro, malathion_lts=mal, agua_lts=agu,
+            observaciones=(str(r["observaciones"]).strip() if r["observaciones"] else None),
+        ))
+    return ControlQuimicoResponse(semana=sem_opt, rows=out, totales=tot)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# GET /control-cultural
+# ──────────────────────────────────────────────────────────────────────
+
+
+class ControlCulturalRow(BaseModel):
+    folio: int
+    fecha: date | None
+    numeroinscripcion: str | None
+    propietario: str | None
+    municipio: str | None
+    hospedero_nombre: str | None
+    kgs_destruidos: float
+    no_arboles: int
+    has_rastreadas: float
+    observaciones: str | None
+
+
+class ControlCulturalResponse(BaseModel):
+    semana: SemanaOption
+    rows: list[ControlCulturalRow]
+    totales: dict
+
+
+@router.get("/control-cultural", response_model=ControlCulturalResponse)
+def control_cultural_semanal(
+    semana: int = Query(..., ge=1),
+    session: Session = Depends(get_legacy_db),
+    _claims: dict = Depends(get_current_legacy_claims),
+) -> ControlCulturalResponse:
+    sem_opt = _resolve_semana(session, semana)
+
+    rows = session.execute(
+        text("""
+            SELECT cmc.folio, cmc.fecha,
+                   TRIM(cmc.numeroinscripcion) AS numeroinscripcion,
+                   sv.nombre_propietario AS propietario,
+                   sv.municipio          AS municipio,
+                   ch.nombre             AS hospedero_nombre,
+                   cmc.kgs_destruidos, cmc.no_arboles, cmc.has_rastreadas,
+                   cmc.observaciones
+            FROM control_mecanico_cultural cmc
+            LEFT JOIN sv01_sv02 sv ON sv.numeroinscripcion = cmc.numeroinscripcion
+            LEFT JOIN cat_hospederos ch ON ch.folio = cmc.folio_hospedero
+            WHERE cmc.no_semana = :s
+            ORDER BY cmc.fecha ASC, cmc.folio ASC
+        """),
+        {"s": semana},
+    ).mappings().all()
+
+    out: list[ControlCulturalRow] = []
+    tot = {"kgs_destruidos": 0.0, "no_arboles": 0, "has_rastreadas": 0.0}
+    for r in rows:
+        kgs = float(r["kgs_destruidos"] or 0)
+        arb = int(r["no_arboles"] or 0)
+        has_r = float(r["has_rastreadas"] or 0)
+        tot["kgs_destruidos"] += kgs
+        tot["no_arboles"] += arb
+        tot["has_rastreadas"] += has_r
+        out.append(ControlCulturalRow(
+            folio=int(r["folio"]),
+            fecha=r["fecha"],
+            numeroinscripcion=str(r["numeroinscripcion"] or "").strip() or None,
+            propietario=(str(r["propietario"]).strip() if r["propietario"] else None),
+            municipio=(str(r["municipio"]).strip() if r["municipio"] else None),
+            hospedero_nombre=(str(r["hospedero_nombre"]).strip() if r["hospedero_nombre"] else None),
+            kgs_destruidos=kgs, no_arboles=arb, has_rastreadas=has_r,
+            observaciones=(str(r["observaciones"]).strip() if r["observaciones"] else None),
+        ))
+    return ControlCulturalResponse(semana=sem_opt, rows=out, totales=tot)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# GET /muestreo-frutos
+# ──────────────────────────────────────────────────────────────────────
+
+
+class MuestreoFrutosRow(BaseModel):
+    folio: int
+    no_muestra: str | None
+    fecha_muestreo: date | None
+    fecha_diseccion: date | None
+    numeroinscripcion: str | None
+    propietario: str | None
+    municipio: str | None
+    hospedero_nombre: str | None
+    no_frutos: int
+    frutos_infestados: int
+    kgs_muestreados: float
+    kgs_disectados: float
+    larvas_por_kg: float
+    usuario: str | None
+
+
+class MuestreoFrutosResponse(BaseModel):
+    semana: SemanaOption
+    rows: list[MuestreoFrutosRow]
+    totales: dict
+
+
+@router.get("/muestreo-frutos", response_model=MuestreoFrutosResponse)
+def muestreo_frutos_semanal(
+    semana: int = Query(..., ge=1),
+    session: Session = Depends(get_legacy_db),
+    _claims: dict = Depends(get_current_legacy_claims),
+) -> MuestreoFrutosResponse:
+    sem_opt = _resolve_semana(session, semana)
+
+    # `cat_hospederos.folio` puede mapear a `muestreo_de_frutos.variedad`
+    # o no — tomamos `variedad` como hospedero genérico (compat con PHP que
+    # usaba clave_hospedero pero la columna no existe en V3).
+    rows = session.execute(
+        text("""
+            SELECT mf.folio, mf.no_muestra, mf.fecha_muestreo, mf.fecha_diseccion,
+                   TRIM(mf.numeroinscripcion) AS numeroinscripcion,
+                   sv.nombre_propietario AS propietario,
+                   sv.municipio          AS municipio,
+                   ch.nombre             AS hospedero_nombre,
+                   mf.no_frutos, mf.frutos_infestados,
+                   mf.kgs_muestreados, mf.kgs_disectados,
+                   mf.usuario
+            FROM muestreo_de_frutos mf
+            LEFT JOIN sv01_sv02 sv ON sv.numeroinscripcion = mf.numeroinscripcion
+            LEFT JOIN cat_hospederos ch ON ch.folio = mf.variedad
+            WHERE mf.no_semana = :s
+            ORDER BY mf.fecha_muestreo ASC, mf.folio ASC
+        """),
+        {"s": semana},
+    ).mappings().all()
+
+    out: list[MuestreoFrutosRow] = []
+    tot = {"no_frutos": 0, "frutos_infestados": 0,
+           "kgs_muestreados": 0.0, "kgs_disectados": 0.0}
+    for r in rows:
+        nfr = int(r["no_frutos"] or 0)
+        finf = int(r["frutos_infestados"] or 0)
+        kgm = float(r["kgs_muestreados"] or 0)
+        kgd = float(r["kgs_disectados"] or 0)
+        tot["no_frutos"] += nfr
+        tot["frutos_infestados"] += finf
+        tot["kgs_muestreados"] += kgm
+        tot["kgs_disectados"] += kgd
+        larvas_kg = (finf / kgm) if kgm > 0 else 0.0
+        out.append(MuestreoFrutosRow(
+            folio=int(r["folio"]),
+            no_muestra=(str(r["no_muestra"]).strip() if r["no_muestra"] else None),
+            fecha_muestreo=r["fecha_muestreo"],
+            fecha_diseccion=r["fecha_diseccion"],
+            numeroinscripcion=str(r["numeroinscripcion"] or "").strip() or None,
+            propietario=(str(r["propietario"]).strip() if r["propietario"] else None),
+            municipio=(str(r["municipio"]).strip() if r["municipio"] else None),
+            hospedero_nombre=(str(r["hospedero_nombre"]).strip() if r["hospedero_nombre"] else None),
+            no_frutos=nfr, frutos_infestados=finf,
+            kgs_muestreados=kgm, kgs_disectados=kgd,
+            larvas_por_kg=round(larvas_kg, 4),
+            usuario=(str(r["usuario"]).strip() if r["usuario"] else None),
+        ))
+    return MuestreoFrutosResponse(semana=sem_opt, rows=out, totales=tot)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _resolve_semana(session: Session, semana_folio: int) -> SemanaOption:
+    """Resuelve metadata de una semana por folio."""
+    row = session.execute(
+        text("""
+            SELECT folio, no_semana, periodo, fecha_inicio, fecha_final
+            FROM semanas WHERE folio = :f
+        """),
+        {"f": semana_folio},
+    ).mappings().first()
+    if not row:
+        return SemanaOption(folio=semana_folio, no_semana=None, periodo=None,
+                            fecha_inicio=None, fecha_final=None,
+                            label=f"sem {semana_folio}")
+    nsa = row["no_semana"]
+    per = row["periodo"]
+    label = f"{int(nsa)} - {int(per)}" if (nsa is not None and per is not None) else f"sem {semana_folio}"
+    return SemanaOption(
+        folio=int(row["folio"]),
+        no_semana=int(nsa) if nsa is not None else None,
+        periodo=int(per) if per is not None else None,
+        fecha_inicio=row["fecha_inicio"],
+        fecha_final=row["fecha_final"],
+        label=label,
     )
