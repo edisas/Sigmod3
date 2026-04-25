@@ -13,6 +13,7 @@ from app.api.routes.legacy import (
     reportes,
     reportes_informes_semanales,
     reportes_inventario,
+    reportes_resumen_diario,
     reportes_tmimf,
 )
 
@@ -32,5 +33,6 @@ router.include_router(correcciones_tmimf_o.router, prefix="/correcciones/tmimf-o
 router.include_router(reportes_tmimf.router, prefix="/reportes/tmimf", tags=["legacy-reportes-tmimf"])
 router.include_router(reportes_inventario.router, prefix="/reportes/inventario-pfa", tags=["legacy-reportes-inventario"])
 router.include_router(reportes_informes_semanales.router, prefix="/reportes/informes-semanales", tags=["legacy-reportes-informes-semanales"])
+router.include_router(reportes_resumen_diario.router, prefix="/reportes/resumen-diario", tags=["legacy-reportes-resumen-diario"])
 router.include_router(dashboard_trampeos.router, prefix="/dashboard-trampeos", tags=["legacy-dashboard-trampeos"])
 router.include_router(dashboard_muestreo.router, prefix="/dashboard-muestreo", tags=["legacy-dashboard-muestreo"])

@@ -57,6 +57,7 @@ const navTree: NavNode[] = [
       { to: '/legacy/reportes/inventario-por-pfa', icon: 'assignment', label: 'Inventario por PFA' },
       { to: '/legacy/reportes/informe-semanal-trampeo', icon: 'description', label: 'Informe semanal trampeo' },
       { to: '/legacy/reportes/informes-semanales-estado', icon: 'summarize', label: 'Informes semanales SAGARPA' },
+      { to: '/legacy/reportes/resumen-diario-modulos', icon: 'today', label: 'Resumen diario por módulo' },
     ],
   },
 ];
