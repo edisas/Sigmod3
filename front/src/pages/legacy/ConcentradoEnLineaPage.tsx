@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Icon from '@/components/ui/Icon';
+import PageHeader from '@/components/legacy/PageHeader';
 import { useLegacyAuth } from '@/context/LegacyAuthContext';
 import ConcentradoTables, { type ConcentradoData } from '@/components/legacy/ConcentradoTables';
 
@@ -35,26 +36,21 @@ export default function ConcentradoEnLineaPage() {
 
   return (
     <div className="p-6 sm:p-8 space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100">
-            Movilización en línea
-          </h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            Concentrado de toneladas movilizadas por módulo y mercado —{' '}
-            <span className="font-semibold text-amber-700 dark:text-amber-400">
-              {user?.nombre_estado}
-            </span>
-          </p>
-        </div>
-        <button
-          onClick={() => window.location.reload()}
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold"
-        >
-          <Icon name="refresh" className="text-base" />
-          Actualizar
-        </button>
-      </div>
+      <PageHeader
+        icon="insights"
+        title="Movilización en línea"
+        subtitle="Concentrado de toneladas movilizadas por módulo y mercado."
+        estado={user?.nombre_estado}
+        actions={
+          <button
+            onClick={() => window.location.reload()}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold"
+          >
+            <Icon name="refresh" className="text-base" />
+            Actualizar
+          </button>
+        }
+      />
 
       {loading && (
         <div className="flex items-center gap-3 p-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">

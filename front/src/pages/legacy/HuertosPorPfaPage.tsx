@@ -1,6 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Icon from '@/components/ui/Icon';
+import ExportButton from '@/components/legacy/ExportButton';
+import KpiBar, { type KpiItem } from '@/components/legacy/KpiBar';
+import PageHeader from '@/components/legacy/PageHeader';
 import { useLegacyAuth } from '@/context/LegacyAuthContext';
+import type { ExportColumn } from '@/lib/excelExport';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
 
@@ -106,75 +110,54 @@ export default function HuertosPorPfaPage() {
     }
   };
 
-  const handleExportCsv = () => {
-    if (!data || !pfaGenerado) return;
-    const sep = ',';
-    const esc = (v: string | number): string => {
-      const s = String(v ?? '');
-      return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
-    const fmt = (n: number | undefined): string =>
-      n === undefined || n === null || Number.isNaN(n) ? '' : n.toFixed(4);
-
-    const lines: string[] = [];
-    lines.push(`Resumen de huertos por PFA — ${user?.nombre_estado ?? ''}`);
-    lines.push(`PFA: ${pfaGenerado.nombre}${pfaGenerado.cedula ? ` (${pfaGenerado.cedula})` : ''}`);
-    lines.push(`Generado: ${new Date().toLocaleString('es-MX')}`);
-    lines.push('');
-
-    const header = [
-      'Cons', 'Inscripción', 'Huerto', 'Ubicación', 'Propietario', 'Dirección',
-      'Teléfono', 'Especie', 'Destino', 'Folio ruta', 'Nombre ruta',
-      ...data.variedades.map((v) => v.nombre),
-      'Total superficie',
+  // Columnas declarativas para el ExportButton — variedades dinámicas con totales.
+  const exportColumns: ExportColumn<HuertoPorPfaItem>[] = useMemo(() => {
+    if (!data) return [];
+    const variedadCols: ExportColumn<HuertoPorPfaItem>[] = data.variedades.map((v) => ({
+      header: v.nombre,
+      accessor: (h) => h.superficies[String(v.folio)] ?? 0,
+      format: 'decimal',
+      totals: 'sum',
+      width: Math.max(v.nombre.length + 2, 10),
+    }));
+    return [
+      { header: '#',           accessor: (_h, ) => '', width: 5 },
+      { header: 'Inscripción', key: 'numero_inscripcion', width: 18 },
+      { header: 'Huerto',      key: 'nombre_unidad', width: 28 },
+      { header: 'Propietario', key: 'nombre_propietario', width: 28 },
+      { header: 'Ubicación',   key: 'ubicacion', width: 22 },
+      { header: 'Especie',     key: 'especie', width: 12 },
+      { header: 'Destino',     key: 'destino', width: 14 },
+      { header: 'Ruta',        accessor: (h) => h.nombre_ruta ?? (h.folio_ruta ? `#${h.folio_ruta}` : ''), width: 16 },
+      ...variedadCols,
+      { header: 'Total superficie', key: 'total_superficie', format: 'decimal', totals: 'sum', width: 14 },
     ];
-    lines.push(header.map(esc).join(sep));
+  }, [data]);
 
-    data.huertos.forEach((h, i) => {
-      const cells: (string | number)[] = [
-        i + 1,
-        h.numero_inscripcion,
-        h.nombre_unidad ?? '',
-        h.ubicacion ?? '',
-        h.nombre_propietario ?? '',
-        h.direccion ?? '',
-        h.telefono ?? '',
-        h.especie ?? '',
-        h.destino ?? '',
-        h.folio_ruta ?? '',
-        h.nombre_ruta ?? '',
-        ...data.variedades.map((v) => fmt(h.superficies[String(v.folio)])),
-        fmt(h.total_superficie),
-      ];
-      lines.push(cells.map((c) => esc(c)).join(sep));
-    });
-
-    const bom = '\uFEFF';
-    const blob = new Blob([bom + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const stamp = new Date().toISOString().slice(0, 10);
-    a.href = url;
-    a.download = `huertos-por-pfa_${user?.legacy_db ?? 'legacy'}_pfa${pfaGenerado.folio}_${stamp}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  const kpis: KpiItem[] = useMemo(() => {
+    if (!data) return [];
+    const variedadesActivas = data.variedades.filter((v) =>
+      data.huertos.some((h) => (h.superficies[String(v.folio)] ?? 0) > 0)
+    ).length;
+    const conRuta = data.huertos.filter((h) => h.folio_ruta).length;
+    return [
+      { label: 'Huertos',     value: data.total_huertos, icon: 'agriculture', tone: 'amber' },
+      { label: 'Superficie',  value: `${data.total_superficie_global.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha`, icon: 'forest', tone: 'emerald' },
+      { label: 'Variedades',  value: variedadesActivas, hint: `de ${data.variedades.length} catálogo`, icon: 'spa', tone: 'amber' },
+      { label: 'Con ruta',    value: conRuta, hint: data.total_huertos ? `${Math.round(conRuta/data.total_huertos*100)}%` : undefined, icon: 'alt_route', tone: 'slate' },
+    ];
+  }, [data]);
 
   const pfaSel = pfas.find((p) => p.folio === pfaFolio);
 
   return (
     <div className="p-6 sm:p-8 space-y-6">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100">
-          Resumen de huertos por PFA
-        </h1>
-        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-          Huertos asignados a un Profesional Fitosanitario Autorizado, con superficie registrada por variedad —{' '}
-          <span className="font-semibold text-amber-700 dark:text-amber-400">{user?.nombre_estado}</span>
-        </p>
-      </div>
+      <PageHeader
+        icon="badge"
+        title="Resumen de huertos por PFA"
+        subtitle="Huertos asignados a un Profesional Fitosanitario Autorizado, con superficie registrada por variedad."
+        estado={user?.nombre_estado}
+      />
 
       <section className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5">
         <label htmlFor="pfa" className="block text-sm font-semibold text-slate-900 dark:text-slate-100 mb-2">
@@ -254,25 +237,20 @@ export default function HuertosPorPfaPage() {
 
       {data && !loadingReporte && (
         <>
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="text-sm text-slate-600 dark:text-slate-400">
-              <span className="font-semibold text-slate-900 dark:text-slate-100">
-                {data.total_huertos}
-              </span>{' '}
-              huerto{data.total_huertos !== 1 ? 's' : ''} ·{' '}
-              <span className="font-semibold text-slate-900 dark:text-slate-100">
-                {formatNumber(data.total_superficie_global)}
-              </span>{' '}
-              ha totales
-            </div>
-            <button
-              onClick={handleExportCsv}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold"
-            >
-              <Icon name="file_download" className="text-base" />
-              Exportar a Excel
-            </button>
-          </div>
+          <KpiBar
+            items={kpis}
+            trailing={
+              pfaGenerado && (
+                <ExportButton<HuertoPorPfaItem>
+                  filename={`huertos-por-pfa_${user?.legacy_db ?? 'legacy'}_pfa${pfaGenerado.folio}_${new Date().toISOString().slice(0,10)}`}
+                  columns={exportColumns}
+                  rows={data.huertos}
+                  title={`Resumen de huertos por PFA — ${user?.nombre_estado ?? ''}`}
+                  subtitle={`PFA: ${pfaGenerado.nombre}${pfaGenerado.cedula ? ` (${pfaGenerado.cedula})` : ''} · Generado ${new Date().toLocaleString('es-MX')}`}
+                />
+              )
+            }
+          />
 
           <section className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
             <div className="overflow-x-auto">

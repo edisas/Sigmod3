@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
-import Icon from '@/components/ui/Icon';
+import ExportButton from '@/components/legacy/ExportButton';
+import KpiBar, { type KpiItem } from '@/components/legacy/KpiBar';
+import type { ExportColumn } from '@/lib/excelExport';
 
 export interface CatalogoItem { folio: number; nombre: string }
 export interface MercadoConcentrado { por_modulo: Record<string, number>; total: number }
@@ -36,83 +38,91 @@ const formatNumber = (n: number | undefined): string => {
   return n.toLocaleString('es-MX', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 };
 
+interface ConcentradoMercadoRow {
+  label: string;
+  m: MercadoConcentrado;
+}
+
 export default function ConcentradoTables({ data, filename, title, subtitle }: Props) {
-  const concentradoRows = useMemo(
-    () =>
-      [
-        { key: 'exportacion', label: 'Exportación', m: data.concentrado.exportacion },
-        { key: 'nacional',    label: 'Nacional',    m: data.concentrado.nacional },
-        { key: 'totales',     label: 'Totales',     m: data.concentrado.totales },
-      ] as const,
-    [data],
-  );
+  const concentradoRows = useMemo<ConcentradoMercadoRow[]>(() => [
+    { label: 'Exportación', m: data.concentrado.exportacion },
+    { label: 'Nacional',    m: data.concentrado.nacional },
+    { label: 'Totales',     m: data.concentrado.totales },
+  ], [data]);
 
-  const handleExportCsv = () => {
-    const sep = ',';
-    const esc = (v: string | number): string => {
-      const s = String(v ?? '');
-      return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  const kpis: KpiItem[] = useMemo(() => {
+    const totalExp = data.concentrado.exportacion.total;
+    const totalNac = data.concentrado.nacional.total;
+    const totalAll = data.concentrado.totales.total;
+    const pctExp = totalAll > 0 ? Math.round((totalExp / totalAll) * 100) : 0;
+    return [
+      { label: 'Total movilizado', value: `${formatNumber(totalAll)} t`, icon: 'local_shipping', tone: 'amber' },
+      { label: 'Exportación', value: `${formatNumber(totalExp)} t`, hint: `${pctExp}%`, icon: 'flight_takeoff', tone: 'emerald' },
+      { label: 'Nacional',    value: `${formatNumber(totalNac)} t`, hint: `${100 - pctExp}%`, icon: 'pin_drop', tone: 'slate' },
+      { label: 'Módulos',     value: data.modulos.length,    icon: 'apartment', tone: 'amber' },
+      { label: 'Variedades',  value: data.variedades.length, icon: 'spa', tone: 'amber' },
+    ];
+  }, [data]);
+
+  // Sheet 1: Concentrado por módulo (mercado × módulo)
+  const sheetConcentrado = useMemo(() => {
+    const cols: ExportColumn<ConcentradoMercadoRow>[] = [
+      { header: 'Mercado', key: 'label', width: 14 },
+      ...data.modulos.map<ExportColumn<ConcentradoMercadoRow>>((m) => ({
+        header: m.nombre,
+        accessor: (r) => r.m.por_modulo[String(m.folio)] ?? 0,
+        format: 'decimal',
+        width: Math.max(m.nombre.length + 2, 10),
+      })),
+      { header: 'Total', accessor: (r) => r.m.total, format: 'decimal', width: 12 },
+    ];
+    return {
+      sheetName: 'Por módulo',
+      title: 'Concentrado por módulo (toneladas)',
+      columns: cols,
+      // Excluimos la fila "Totales" del XLSX (la fila totals se autogenera con totals='sum')
+      // pero acá ya viene precomputada del backend; mostramos las 3 filas tal cual.
+      rows: concentradoRows,
     };
-    const fmt = (n: number | undefined): string =>
-      n === undefined || n === null || Number.isNaN(n) ? '' : n.toFixed(3);
+  }, [data, concentradoRows]);
 
-    const lines: string[] = [];
-    lines.push(`${title} — ${subtitle}`);
-    lines.push(`Generado: ${new Date().toLocaleString('es-MX')}`);
-    lines.push('');
+  // Sheet 2: Detallado por variedad
+  const sheetDetallado = useMemo(() => {
+    const cols: ExportColumn<DetalladoFila>[] = [
+      { header: 'Módulo / Mercado', accessor: (r) => `${r.nombre_modulo} ${r.mercado}`, width: 28 },
+      ...data.variedades.map<ExportColumn<DetalladoFila>>((v) => ({
+        header: v.nombre,
+        accessor: (r) => r.por_variedad[String(v.folio)] ?? 0,
+        format: 'decimal',
+        totals: 'sum',
+        width: Math.max(v.nombre.length + 2, 10),
+      })),
+      { header: 'Total', key: 'total', format: 'decimal', totals: 'sum', width: 12 },
+    ];
+    return {
+      sheetName: 'Por variedad',
+      title: 'Detallado por variedad (toneladas)',
+      columns: cols,
+      rows: data.detallado,
+    };
+  }, [data]);
 
-    lines.push('Concentrado por módulo (toneladas)');
-    lines.push([''].concat(data.modulos.map((m) => m.nombre)).concat(['Totales']).map(esc).join(sep));
-    for (const row of concentradoRows) {
-      const cells: string[] = [row.label];
-      for (const m of data.modulos) cells.push(fmt(row.m.por_modulo[String(m.folio)]));
-      cells.push(fmt(row.m.total));
-      lines.push(cells.map(esc).join(sep));
-    }
-    lines.push('');
-
-    lines.push('Detallado por variedad (toneladas)');
-    lines.push(
-      ['Módulo / Mercado']
-        .concat(data.variedades.map((v) => v.nombre))
-        .concat(['Total'])
-        .map(esc)
-        .join(sep),
-    );
-    for (const fila of data.detallado) {
-      const cells: string[] = [`${fila.nombre_modulo} ${fila.mercado}`];
-      for (const v of data.variedades) cells.push(fmt(fila.por_variedad[String(v.folio)]));
-      cells.push(fmt(fila.total));
-      lines.push(cells.map(esc).join(sep));
-    }
-    const totalesRow: string[] = ['Totales'];
-    for (const v of data.variedades) totalesRow.push(fmt(data.totales_por_variedad[String(v.folio)]));
-    totalesRow.push(fmt(data.total_global));
-    lines.push(totalesRow.map(esc).join(sep));
-
-    const bom = '\uFEFF';
-    const blob = new Blob([bom + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  // Strip extension del filename para multi-sheet
+  const filenameStem = filename.replace(/\.csv$/i, '');
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <button
-          onClick={handleExportCsv}
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold"
-        >
-          <Icon name="file_download" className="text-base" />
-          Exportar a Excel
-        </button>
-      </div>
+      <KpiBar
+        items={kpis}
+        trailing={
+          <ExportButton
+            filename={filenameStem}
+            title={title}
+            subtitle={`${subtitle} · Generado ${new Date().toLocaleString('es-MX')}`}
+            sheets={[sheetConcentrado, sheetDetallado]}
+          />
+        }
+      />
 
       <section className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
         <header className="px-5 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40">
@@ -139,10 +149,10 @@ export default function ConcentradoTables({ data, filename, title, subtitle }: P
             <tbody>
               {concentradoRows.map((row, i) => (
                 <tr
-                  key={row.key}
+                  key={row.label}
                   className={`border-t border-slate-100 dark:border-slate-800 ${
-                    row.key === 'totales' ? 'bg-slate-50 dark:bg-slate-800/40 font-semibold' : ''
-                  } ${i % 2 === 1 && row.key !== 'totales' ? 'bg-slate-50/50 dark:bg-slate-800/20' : ''}`}
+                    row.label === 'Totales' ? 'bg-slate-50 dark:bg-slate-800/40 font-semibold' : ''
+                  } ${i % 2 === 1 && row.label !== 'Totales' ? 'bg-slate-50/50 dark:bg-slate-800/20' : ''}`}
                 >
                   <td className="px-4 py-2 text-slate-900 dark:text-slate-100 font-medium">{row.label}</td>
                   {data.modulos.map((m) => (

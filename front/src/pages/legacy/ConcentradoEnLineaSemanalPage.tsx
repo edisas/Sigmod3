@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Icon from '@/components/ui/Icon';
+import PageHeader from '@/components/legacy/PageHeader';
 import { useLegacyAuth } from '@/context/LegacyAuthContext';
 import ConcentradoTables, { type ConcentradoData } from '@/components/legacy/ConcentradoTables';
 
@@ -80,17 +81,12 @@ export default function ConcentradoEnLineaSemanalPage() {
 
   return (
     <div className="p-6 sm:p-8 space-y-6">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100">
-          Movilización en línea semanal
-        </h1>
-        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-          Concentrado por módulo, mercado y variedad filtrado por semana —{' '}
-          <span className="font-semibold text-amber-700 dark:text-amber-400">
-            {user?.nombre_estado}
-          </span>
-        </p>
-      </div>
+      <PageHeader
+        icon="date_range"
+        title="Movilización en línea semanal"
+        subtitle="Concentrado por módulo, mercado y variedad filtrado por semana."
+        estado={user?.nombre_estado}
+      />
 
       <section className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5">
         <label htmlFor="semana" className="block text-sm font-semibold text-slate-900 dark:text-slate-100 mb-2">

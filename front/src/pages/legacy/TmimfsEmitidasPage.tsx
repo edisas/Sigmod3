@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from '@/components/ui/Icon';
+import ExportButton from '@/components/legacy/ExportButton';
+import KpiBar, { type KpiItem } from '@/components/legacy/KpiBar';
+import PageHeader from '@/components/legacy/PageHeader';
 import { useLegacyAuth } from '@/context/LegacyAuthContext';
+import type { ExportColumn } from '@/lib/excelExport';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
 
@@ -133,49 +137,56 @@ export default function TmimfsEmitidasPage() {
     });
   };
 
-  const exportarCsv = () => {
-    const headers = [
-      'Folio', 'Tipo', 'Status', 'Inscripción', 'Propietario', 'Huerto',
-      'Fecha emisión', 'Hora', 'PFA', 'Usuario', 'Módulo', 'Mercado', 'Semana',
+  // KPIs derivados del listado actual (visible)
+  const kpis: KpiItem[] = useMemo(() => {
+    const total = page.total;
+    const exp = page.rows.filter((r) => r.mercado_destino === 1).length;
+    const nac = page.rows.filter((r) => r.mercado_destino === 2).length;
+    const huertos = new Set(page.rows.map((r) => r.numeroinscripcion)).size;
+    const pfas = new Set(page.rows.map((r) => r.pfa_folio).filter(Boolean)).size;
+    return [
+      { label: 'TMIMFs',     value: total.toLocaleString('es-MX'), icon: 'receipt_long', tone: 'amber' },
+      { label: 'Exportación', value: exp, hint: page.rows.length ? `${Math.round(exp/page.rows.length*100)}% del visible` : undefined, icon: 'flight_takeoff', tone: 'emerald' },
+      { label: 'Nacional',   value: nac, hint: page.rows.length ? `${Math.round(nac/page.rows.length*100)}% del visible` : undefined, icon: 'local_shipping', tone: 'slate' },
+      { label: 'Huertos únicos', value: huertos, icon: 'agriculture', tone: 'amber' },
+      { label: 'PFAs',       value: pfas,    icon: 'badge', tone: 'amber' },
     ];
-    const lines = [headers.join(',')];
-    for (const r of page.rows) {
-      lines.push([
-        r.folio_tmimf,
-        r.tipo_tarjeta ?? '',
-        r.status ?? '',
-        r.numeroinscripcion,
-        csvEsc(r.nombre_propietario),
-        csvEsc(r.nombre_unidad),
-        r.fecha_emision ?? '',
-        r.hora_emision ?? '',
-        csvEsc(r.pfa_nombre),
-        csvEsc(r.usuario_generador_nombre),
-        csvEsc(r.modulo_emisor_nombre),
-        r.mercado_destino === 1 ? 'Exportación' : r.mercado_destino === 2 ? 'Nacional' : '',
-        r.semana ?? '',
-      ].join(','));
-    }
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `tmimfs_${modo}_${fechaInicio}_${fechaFin}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  }, [page]);
+
+  // Columnas del export — declarativo, reusado por XLSX y CSV.
+  const exportColumns: ExportColumn<TmimfRow>[] = [
+    { header: 'Folio TMIMF',   key: 'folio_tmimf', width: 16 },
+    { header: 'Tipo',          key: 'tipo_tarjeta', width: 6 },
+    { header: 'Status',        key: 'status', width: 8 },
+    { header: 'Inscripción',   key: 'numeroinscripcion', width: 18 },
+    { header: 'Propietario',   key: 'nombre_propietario', width: 30 },
+    { header: 'Huerto',        key: 'nombre_unidad', width: 26 },
+    { header: 'Fecha emisión', key: 'fecha_emision', format: 'date' },
+    { header: 'Hora',          key: 'hora_emision', width: 9 },
+    { header: 'PFA',           key: 'pfa_nombre', width: 30 },
+    { header: 'Usuario',       key: 'usuario_generador_nombre', width: 24 },
+    { header: 'Módulo',        key: 'modulo_emisor_nombre', width: 16 },
+    {
+      header: 'Mercado',
+      accessor: (r) => r.mercado_destino === 1 ? 'Exportación' : r.mercado_destino === 2 ? 'Nacional' : '',
+      width: 12,
+    },
+    { header: 'Semana',        key: 'semana', format: 'integer', totals: 'count' },
+  ];
+
+  const fechaStr = `${fechaInicio} a ${fechaFin}`;
+  const modoLabel = modo === 'emitidas' ? 'Por fecha de emisión'
+    : modo === 'validadas_normex' ? 'Validadas en empaque'
+    : 'Mis validaciones';
 
   return (
     <div className="p-6 sm:p-8 space-y-6">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100">
-          TMIMFs emitidas por fecha
-        </h1>
-        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-          Listado de tarjetas emitidas o validadas en empaque, filtrable por modo y rango —{' '}
-          <span className="font-semibold text-amber-700 dark:text-amber-400">{user?.nombre_estado}</span>
-        </p>
-      </div>
+      <PageHeader
+        icon="receipt_long"
+        title="TMIMFs emitidas por fecha"
+        subtitle="Listado de tarjetas emitidas o validadas en empaque, filtrable por modo y rango."
+        estado={user?.nombre_estado}
+      />
 
       {/* Filtros */}
       <section className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5 space-y-4">
@@ -235,14 +246,23 @@ export default function TmimfsEmitidasPage() {
             <Icon name="search" className="text-base" />
             {cargando ? 'Generando…' : 'Generar'}
           </button>
-          {page.rows.length > 0 && (
-            <button type="button" onClick={exportarCsv} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm font-medium inline-flex items-center gap-2">
-              <Icon name="download" className="text-base" />
-              CSV
-            </button>
-          )}
         </div>
       </section>
+
+      {page.total > 0 && (
+        <KpiBar
+          items={kpis}
+          trailing={
+            <ExportButton<TmimfRow>
+              filename={`tmimfs_${modo}_${fechaInicio}_${fechaFin}`}
+              columns={exportColumns}
+              rows={page.rows}
+              title={`TMIMFs emitidas — ${user?.nombre_estado ?? ''}`}
+              subtitle={`${modoLabel} · ${fechaStr} · ${page.rows.length} de ${page.total} TMIMF(s)`}
+            />
+          }
+        />
+      )}
 
       {/* Tabla */}
       {page.total > 0 && (
@@ -403,11 +423,3 @@ function FragmentoFila({
   );
 }
 
-function csvEsc(v: string | null | undefined): string {
-  if (v === null || v === undefined) return '';
-  const s = String(v);
-  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-    return `"${s.replace(/"/g, '""')}"`;
-  }
-  return s;
-}
