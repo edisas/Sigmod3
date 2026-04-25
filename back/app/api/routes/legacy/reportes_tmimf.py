@@ -14,8 +14,9 @@ Consolida 3 variantes del PHP legacy en un solo endpoint parametrizado:
 Además opcionalmente incluye los renglones de `detallado_tmimf` (variedad,
 cantidad, vehículo, placas, saldo, cajas por tamaño, granel).
 
-Filtros adicionales: tipo_tarjeta (O/M/I), mercado_destino (1 Exportación,
-2 Nacional), módulo emisor.
+Filtros adicionales: tipo_tarjeta (`M`=Movilización, `O`=Operaciones —
+las `I`=Inválidas se EXCLUYEN siempre, no son visibles en este reporte),
+mercado_destino (1 Exportación, 2 Nacional), módulo emisor.
 
 Parámetros always-on: `fecha_inicio`, `fecha_fin`, paginación offset/limit.
 
@@ -96,7 +97,7 @@ def tmimfs_emitidas(
     fecha_inicio: date = Query(..., description="Fecha inicio (inclusive)"),
     fecha_fin: date = Query(..., description="Fecha fin (inclusive)"),
     modo: str = Query("emitidas", pattern="^(emitidas|validadas_normex|mis_validadas)$"),
-    tipo_tarjeta: str | None = Query(None, pattern="^(O|M|I)$"),
+    tipo_tarjeta: str | None = Query(None, pattern="^(O|M)$", description="Solo M y O — las I (Inválidas) se excluyen siempre"),
     mercado_destino: int | None = Query(None, ge=1, le=2),
     modulo_folio: int | None = Query(None, ge=1),
     incluir_detallado: bool = Query(False),
@@ -109,8 +110,13 @@ def tmimfs_emitidas(
         fecha_inicio, fecha_fin = fecha_fin, fecha_inicio
 
     # Construir WHERE dinámico según modo.
+    # Las TMIMF tipo 'I' (Inválidas) se excluyen siempre — son cancelaciones
+    # internas que no deben aparecer en reportes ni dashboards.
     params: dict = {"fi": fecha_inicio, "ff": fecha_fin}
-    conds: list[str] = ["LENGTH(tmi.folio_tmimf) > 9"]
+    conds: list[str] = [
+        "LENGTH(tmi.folio_tmimf) > 9",
+        "(tmi.tipo_tarjeta IS NULL OR tmi.tipo_tarjeta <> 'I')",
+    ]
 
     if modo == "emitidas":
         conds.append("tmi.fecha_emision BETWEEN :fi AND :ff")

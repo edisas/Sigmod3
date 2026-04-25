@@ -308,7 +308,8 @@ def _recalcular_tmimf(session: Session, folio_tmimf: str, clave_mov: str, numero
 
 def _cambiar_mercado_cascade(session: Session, folio_tmimf: str) -> list[dict]:
     """Pasa a mercado_destino=2 todas las filas de tmimf con mismo folio_tmimf
-    (tipo O e I) que aún no estén en nacional. Devuelve snapshot de las filas
+    (tipos M y O) que aún no estén en nacional. Las tipo 'I' (Inválidas) NO
+    se tocan — son cancelaciones internas. Devuelve snapshot de las filas
     modificadas para auditoría."""
     rows_before = session.execute(
         text("""
@@ -316,6 +317,7 @@ def _cambiar_mercado_cascade(session: Session, folio_tmimf: str) -> list[dict]:
               FROM tmimf
              WHERE folio_tmimf = :f
                AND (mercado_destino IS NULL OR mercado_destino <> 2)
+               AND (tipo_tarjeta IS NULL OR tipo_tarjeta <> 'I')
         """),
         {"f": folio_tmimf},
     ).mappings().all()
@@ -326,6 +328,7 @@ def _cambiar_mercado_cascade(session: Session, folio_tmimf: str) -> list[dict]:
                 UPDATE tmimf SET mercado_destino = 2
                  WHERE folio_tmimf = :f
                    AND (mercado_destino IS NULL OR mercado_destino <> 2)
+                   AND (tipo_tarjeta IS NULL OR tipo_tarjeta <> 'I')
             """),
             {"f": folio_tmimf},
         )
@@ -339,6 +342,7 @@ def _preview_cambio_mercado(session: Session, folio_tmimf: str) -> PreviewCambio
             SELECT folio_tmimf, tipo_tarjeta, mercado_destino FROM tmimf
              WHERE folio_tmimf = :f
                AND (mercado_destino IS NULL OR mercado_destino <> 2)
+               AND (tipo_tarjeta IS NULL OR tipo_tarjeta <> 'I')
         """),
         {"f": folio_tmimf},
     ).mappings().all()

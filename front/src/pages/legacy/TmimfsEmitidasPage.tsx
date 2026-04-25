@@ -214,8 +214,7 @@ export default function TmimfsEmitidasPage() {
             <select id="tt" value={tipoTarjeta} onChange={(e) => setTipoTarjeta(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
               <option value="">Todas</option>
               <option value="M">M · Movilización</option>
-              <option value="O">O · Operativa</option>
-              <option value="I">I · Internacional</option>
+              <option value="O">O · Operaciones</option>
             </select>
           </div>
           <div>
