@@ -11,6 +11,8 @@ from app.api.routes.legacy import (
     dashboard_trampeos,
     informe_general,
     reportes,
+    reportes_documentos,
+    reportes_estimado_cosecha,
     reportes_informes_semanales,
     reportes_inventario,
     reportes_resumen_diario,
@@ -34,5 +36,7 @@ router.include_router(reportes_tmimf.router, prefix="/reportes/tmimf", tags=["le
 router.include_router(reportes_inventario.router, prefix="/reportes/inventario-pfa", tags=["legacy-reportes-inventario"])
 router.include_router(reportes_informes_semanales.router, prefix="/reportes/informes-semanales", tags=["legacy-reportes-informes-semanales"])
 router.include_router(reportes_resumen_diario.router, prefix="/reportes/resumen-diario", tags=["legacy-reportes-resumen-diario"])
+router.include_router(reportes_estimado_cosecha.router, prefix="/reportes/estimado-cosecha", tags=["legacy-reportes-estimado-cosecha"])
+router.include_router(reportes_documentos.router, prefix="/reportes/documentos", tags=["legacy-reportes-documentos"])
 router.include_router(dashboard_trampeos.router, prefix="/dashboard-trampeos", tags=["legacy-dashboard-trampeos"])
 router.include_router(dashboard_muestreo.router, prefix="/dashboard-muestreo", tags=["legacy-dashboard-muestreo"])

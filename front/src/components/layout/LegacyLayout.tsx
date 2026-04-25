@@ -58,6 +58,8 @@ const navTree: NavNode[] = [
       { to: '/legacy/reportes/informe-semanal-trampeo', icon: 'description', label: 'Informe semanal trampeo' },
       { to: '/legacy/reportes/informes-semanales-estado', icon: 'summarize', label: 'Informes semanales SAGARPA' },
       { to: '/legacy/reportes/resumen-diario-modulos', icon: 'today', label: 'Resumen diario por módulo' },
+      { to: '/legacy/reportes/estimado-cosecha-pfa', icon: 'eco', label: 'Estimado de cosecha por PFA' },
+      { to: '/legacy/reportes/documentos-por-fecha', icon: 'description', label: 'Documentos por fecha (COPREF/recibos)' },
     ],
   },
 ];
