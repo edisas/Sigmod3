@@ -5,6 +5,7 @@ from app.api.routes.legacy import (
     cancelacion_tmimf,
     catalogos,
     correcciones,
+    correcciones_estimado_cosecha,
     correcciones_muestreo,
     correcciones_tmimf_o,
     dashboard,
@@ -40,5 +41,6 @@ router.include_router(reportes_resumen_diario.router, prefix="/reportes/resumen-
 router.include_router(reportes_estimado_cosecha.router, prefix="/reportes/estimado-cosecha", tags=["legacy-reportes-estimado-cosecha"])
 router.include_router(reportes_documentos.router, prefix="/reportes/documentos", tags=["legacy-reportes-documentos"])
 router.include_router(cancelacion_tmimf.router, prefix="/correcciones/cancelacion-tmimf", tags=["legacy-cancelacion-tmimf"])
+router.include_router(correcciones_estimado_cosecha.router, prefix="/correcciones/estimado-cosecha", tags=["legacy-correcciones-estimado-cosecha"])
 router.include_router(dashboard_trampeos.router, prefix="/dashboard-trampeos", tags=["legacy-dashboard-trampeos"])
 router.include_router(dashboard_muestreo.router, prefix="/dashboard-muestreo", tags=["legacy-dashboard-muestreo"])
