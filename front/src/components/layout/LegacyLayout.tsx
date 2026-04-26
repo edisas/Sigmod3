@@ -31,6 +31,7 @@ const navTree: NavNode[] = [
     label: 'Catálogos',
     children: [
       { to: '/legacy/catalogos/rutas', icon: 'alt_route', label: 'Rutas' },
+      { to: '/legacy/catalogos/auxiliares', icon: 'folder_managed', label: 'Auxiliares (especies, vehículos, …)' },
     ],
   },
   {
