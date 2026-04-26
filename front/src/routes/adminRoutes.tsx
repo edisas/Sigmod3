@@ -21,6 +21,7 @@ const CatalogTiposFcoopPage = lazy(() => import('@/pages/CatalogTiposFcoopPage')
 const CatalogTipoFcoopFormPage = lazy(() => import('@/pages/CatalogTipoFcoopFormPage'));
 const CatalogFigurasCooperadorasPage = lazy(() => import('@/pages/CatalogFigurasCooperadorasPage'));
 const CatalogFiguraCooperadoraFormPage = lazy(() => import('@/pages/CatalogFiguraCooperadoraFormPage'));
+const CatalogosAuxiliaresPage = lazy(() => import('@/pages/CatalogosAuxiliaresPage'));
 const FiguraCooperadoraAutorizacionPage = lazy(() => import('@/pages/FiguraCooperadoraAutorizacionPage'));
 const AutorizacionesFcoopListPage = lazy(() => import('@/pages/AutorizacionesFcoopListPage'));
 const SystemConfigPage = lazy(() => import('@/pages/SystemConfigPage'));
@@ -61,6 +62,8 @@ export const adminProtectedRoutes = (
     <Route path="/catalogos/figuras-cooperadoras" element={<CatalogFigurasCooperadorasPage />} />
     <Route path="/catalogos/figuras-cooperadoras/nuevo" element={<CatalogFiguraCooperadoraFormPage />} />
     <Route path="/catalogos/figuras-cooperadoras/:figuraId/editar" element={<CatalogFiguraCooperadoraFormPage />} />
+    <Route path="/catalogos/auxiliares" element={<CatalogosAuxiliaresPage />} />
+    <Route path="/catalogos/auxiliares/:slug" element={<CatalogosAuxiliaresPage />} />
     <Route path="/configuracion/sistema" element={<SystemConfigPage />} />
     <Route path="/configuracion/menus" element={<MenuSettingsPage />} />
     <Route path="/autorizaciones/figura-cooperadora/listado" element={<AutorizacionesFcoopListPage />} />

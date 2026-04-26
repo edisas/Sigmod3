@@ -219,6 +219,7 @@ def list_cambios(
 # ──────────────────────────────────────────────────────────────────────
 
 from app.api.routes import (  # noqa: E402
+    catalogos_auxiliares,
     catalogos_estados,
     catalogos_figuras,
     catalogos_localidades,
@@ -231,3 +232,4 @@ router.include_router(catalogos_municipios.router)
 router.include_router(catalogos_localidades.router)
 router.include_router(catalogos_tipos_fcoop.router)
 router.include_router(catalogos_figuras.router)
+router.include_router(catalogos_auxiliares.router, prefix="/auxiliares")

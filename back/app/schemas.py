@@ -403,3 +403,46 @@ class AutorizacionFiguraRevocarResponse(BaseModel):
     revocada_at: datetime
     revocada_por_usuario_id: int
     revocacion_oficio_path: str
+
+
+# ---------------------------------------------------------------
+# Catalogos auxiliares V3 nativos (Sprint 1 Fase 2)
+# Esquema comun a los 10 catalogos: variedades, especies_mosca,
+# vehiculos, hospederos, tipos_aplicacion, aplicadores, areas,
+# empaques, productos, status_revision.
+# ---------------------------------------------------------------
+
+
+class CatalogAuxBase(BaseModel):
+    clave: str = Field(min_length=1, max_length=40, pattern=r"^[a-z0-9][a-z0-9_-]{0,39}$")
+    nombre: str = Field(min_length=1, max_length=120)
+    descripcion: str | None = Field(default=None, max_length=4000)
+    estatus_id: int = 1
+
+
+class CatalogAuxCreate(CatalogAuxBase):
+    estados_aplicables: list[int] = Field(default_factory=list, max_length=64)
+
+
+class CatalogAuxUpdate(CatalogAuxBase):
+    # estados_aplicables=None significa "no tocar la pivote".
+    # Lista (incluso vacia) significa "reescribir la pivote con estos ids".
+    estados_aplicables: list[int] | None = Field(default=None, max_length=64)
+
+
+class CatalogAuxResponse(CatalogAuxBase):
+    id: int
+    estados_aplicables: list[int] = Field(default_factory=list)
+    estados_aplicables_nombres: list[str] = Field(default_factory=list)
+
+
+class CatalogAuxListResponse(BaseModel):
+    items: list[CatalogAuxResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class CatalogAuxCatalogoMeta(BaseModel):
+    slug: str
+    label: str
