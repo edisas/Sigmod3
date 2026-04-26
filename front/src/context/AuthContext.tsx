@@ -5,6 +5,7 @@ interface LoginResult {
   success: boolean;
   redirectTo: string;
   error?: string;
+  requires_state_selection?: boolean;
 }
 
 interface AuthContextType extends AuthState {
@@ -18,7 +19,12 @@ interface AuthContextType extends AuthState {
     rolId: number;
     figuraCooperadoraId?: number | null;
   }) => Promise<LoginResult>;
+  completeStateSelection: (estadoId: number) => Promise<LoginResult>;
 }
+
+const STATE_SELECT_TOKEN_KEY = 'sigmod_state_select_token';
+const STATE_SELECT_STATES_KEY = 'sigmod_state_select_states';
+const STATE_SELECT_USER_KEY = 'sigmod_state_select_user';
 
 const AuthContext = createContext<AuthContextType | null>(null);
 const TOKEN_KEY = 'sigmod_token';
@@ -166,15 +172,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       let accessToken = data.access_token;
-      if (!accessToken && data.requires_state_selection && data.state_selection_token && data.available_states?.length) {
+      const availableStates = data.available_states ?? [];
+
+      // Si solo hay 1 estado, auto-seleccionarlo para no molestar al usuario.
+      // Si hay >1 estado, derivar a la pantalla de selección /select-state.
+      if (!accessToken && data.requires_state_selection && data.state_selection_token && availableStates.length === 1) {
         const selected = await apiRequest<AuthApiResponse>('/auth/select-state', {
           method: 'POST',
           body: JSON.stringify({
             state_selection_token: data.state_selection_token,
-            estado_id: data.available_states[0].id,
+            estado_id: availableStates[0].id,
           }),
         });
         accessToken = selected.access_token;
+      } else if (!accessToken && data.requires_state_selection && data.state_selection_token && availableStates.length > 1) {
+        sessionStorage.setItem(STATE_SELECT_TOKEN_KEY, data.state_selection_token);
+        sessionStorage.setItem(STATE_SELECT_STATES_KEY, JSON.stringify(availableStates));
+        sessionStorage.setItem(STATE_SELECT_USER_KEY, JSON.stringify(data.user));
+        setState((prev) => ({ ...prev, isLoading: false }));
+        return { success: true, redirectTo: '/select-state', requires_state_selection: true };
       }
 
       if (!accessToken) {
@@ -198,6 +214,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setState((prev) => ({ ...prev, isLoading: false }));
       const error = describeAuthError(err, 'Credenciales incorrectas.');
       return { success: false, redirectTo: '/login', error };
+    }
+  }, []);
+
+  const completeStateSelection = useCallback(async (estadoId: number): Promise<LoginResult> => {
+    const token = sessionStorage.getItem(STATE_SELECT_TOKEN_KEY);
+    const userRaw = sessionStorage.getItem(STATE_SELECT_USER_KEY);
+    if (!token || !userRaw) {
+      return { success: false, redirectTo: '/login', error: 'Sesión de selección expirada. Vuelve a iniciar sesión.' };
+    }
+    setState((prev) => ({ ...prev, isLoading: true }));
+    try {
+      const selected = await apiRequest<AuthApiResponse>('/auth/select-state', {
+        method: 'POST',
+        body: JSON.stringify({ state_selection_token: token, estado_id: estadoId }),
+      });
+      if (!selected.access_token) {
+        setState((prev) => ({ ...prev, isLoading: false }));
+        return { success: false, redirectTo: '/select-state', error: 'No se pudo completar el inicio de sesión.' };
+      }
+      localStorage.setItem(TOKEN_KEY, selected.access_token);
+      sessionStorage.removeItem(STATE_SELECT_TOKEN_KEY);
+      sessionStorage.removeItem(STATE_SELECT_STATES_KEY);
+      sessionStorage.removeItem(STATE_SELECT_USER_KEY);
+      const userData = selected.user ?? (JSON.parse(userRaw) as ApiUser);
+      setState({ user: toUser(userData), isAuthenticated: true, isLoading: false });
+      let redirectTo = '/';
+      try {
+        const hint = await apiRequest<{ redirect_to?: string }>('/solicitudes/routing-hint', {
+          headers: { Authorization: `Bearer ${selected.access_token}` },
+        });
+        if (hint.redirect_to) redirectTo = hint.redirect_to;
+      } catch {
+        redirectTo = '/';
+      }
+      return { success: true, redirectTo };
+    } catch (err) {
+      setState((prev) => ({ ...prev, isLoading: false }));
+      const error = describeAuthError(err, 'No se pudo completar el inicio de sesión.');
+      return { success: false, redirectTo: '/select-state', error };
     }
   }, []);
 
@@ -256,7 +311,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, register }}>
+    <AuthContext.Provider value={{ ...state, login, logout, register, completeStateSelection }}>
       {children}
     </AuthContext.Provider>
   );

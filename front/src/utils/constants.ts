@@ -37,6 +37,7 @@ export const ADMIN_NAVIGATION: NavItem[] = [
           { icon: 'public', label: 'Estados', path: '/catalogos/estados' },
           { icon: 'location_city', label: 'Municipios', path: '/catalogos/municipios' },
           { icon: 'place', label: 'Localidades', path: '/catalogos/localidades' },
+          { icon: 'category', label: 'Auxiliares', path: '/catalogos/auxiliares' },
         ],
       },
       { icon: 'menu_open', label: 'Configuración de Menus', path: '/configuracion/menus' },

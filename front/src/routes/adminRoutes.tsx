@@ -22,6 +22,7 @@ const CatalogTipoFcoopFormPage = lazy(() => import('@/pages/CatalogTipoFcoopForm
 const CatalogFigurasCooperadorasPage = lazy(() => import('@/pages/CatalogFigurasCooperadorasPage'));
 const CatalogFiguraCooperadoraFormPage = lazy(() => import('@/pages/CatalogFiguraCooperadoraFormPage'));
 const CatalogosAuxiliaresPage = lazy(() => import('@/pages/CatalogosAuxiliaresPage'));
+const SelectStatePage = lazy(() => import('@/pages/SelectStatePage'));
 const FiguraCooperadoraAutorizacionPage = lazy(() => import('@/pages/FiguraCooperadoraAutorizacionPage'));
 const AutorizacionesFcoopListPage = lazy(() => import('@/pages/AutorizacionesFcoopListPage'));
 const SystemConfigPage = lazy(() => import('@/pages/SystemConfigPage'));
@@ -32,6 +33,7 @@ export const publicAuthRoutes = (
   <Route element={<AuthLayout />}>
     <Route path="/login" element={<LoginPage />} />
     <Route path="/register" element={<RegisterPage />} />
+    <Route path="/select-state" element={<SelectStatePage />} />
   </Route>
 );
 
