@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.routes.legacy import (
     auth,
     cancelacion_tmimf,
+    catalogo_huertos,
     catalogos,
     catalogos_auxiliares,
     correcciones,
@@ -44,5 +45,6 @@ router.include_router(reportes_documentos.router, prefix="/reportes/documentos",
 router.include_router(cancelacion_tmimf.router, prefix="/correcciones/cancelacion-tmimf", tags=["legacy-cancelacion-tmimf"])
 router.include_router(correcciones_estimado_cosecha.router, prefix="/correcciones/estimado-cosecha", tags=["legacy-correcciones-estimado-cosecha"])
 router.include_router(catalogos_auxiliares.router, prefix="/catalogos-auxiliares", tags=["legacy-catalogos-auxiliares"])
+router.include_router(catalogo_huertos.router, prefix="/catalogos/huertos", tags=["legacy-catalogo-huertos"])
 router.include_router(dashboard_trampeos.router, prefix="/dashboard-trampeos", tags=["legacy-dashboard-trampeos"])
 router.include_router(dashboard_muestreo.router, prefix="/dashboard-muestreo", tags=["legacy-dashboard-muestreo"])

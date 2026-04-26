@@ -202,6 +202,9 @@ def tmimfs_emitidas(
         folios = [str(r["folio_tmimf"]) for r in rows]
         placeholders = ", ".join(f":f{i}" for i in range(len(folios)))
         params_det = {f"f{i}": folios[i] for i in range(len(folios))}
+        # `detallado_tmimf.tipo_vehiculo` es FK a `cat_vehiculos.folio` (int).
+        # Joineamos con cat_vehiculos para devolver la descripción legible
+        # (TORTON, TRAILER, etc.) en lugar del ID numérico.
         det_rows = session.execute(
             text(f"""
                 SELECT
@@ -211,7 +214,8 @@ def tmimfs_emitidas(
                     d.cantidad_movilizada,
                     d.variedad_movilizada AS variedad_folio,
                     v.descripcion         AS variedad_nombre,
-                    d.tipo_vehiculo,
+                    d.tipo_vehiculo       AS tipo_vehiculo_folio,
+                    veh.descripcion       AS tipo_vehiculo_nombre,
                     d.placas,
                     d.saldo,
                     {granel_expr}         AS granel,
@@ -219,6 +223,7 @@ def tmimfs_emitidas(
                     d.status
                 FROM detallado_tmimf d
                 LEFT JOIN cat_variedades v ON v.folio = d.variedad_movilizada
+                LEFT JOIN cat_vehiculos veh ON veh.folio = d.tipo_vehiculo
                 WHERE d.folio_completo IN ({placeholders})
                 ORDER BY d.folio_completo ASC, d.folio ASC
             """),
@@ -230,13 +235,20 @@ def tmimfs_emitidas(
                 int(dr[c] or 0)
                 for c in ("cajas14", "cajas15", "cajas16", "cajas18", "cajas20", "cajas25", "cajas30")
             )
+            # Preferir nombre del catálogo; si falta, mostrar #{folio} para no perder info.
+            veh_nombre = dr["tipo_vehiculo_nombre"]
+            veh_folio = dr["tipo_vehiculo_folio"]
+            tipo_veh = (
+                str(veh_nombre).strip() if veh_nombre
+                else (f"#{veh_folio}" if veh_folio else None)
+            )
             detallado_map.setdefault(fc, []).append(DetalladoRow(
                 folio=int(dr["folio"]),
                 sub_folio=(str(dr["sub_folio"]).strip() if dr["sub_folio"] is not None else None),
                 cantidad_movilizada=float(dr["cantidad_movilizada"] or 0),
                 variedad_folio=int(dr["variedad_folio"]) if dr["variedad_folio"] else None,
                 variedad_nombre=(str(dr["variedad_nombre"]).strip() if dr["variedad_nombre"] else None),
-                tipo_vehiculo=(str(dr["tipo_vehiculo"]).strip() if dr["tipo_vehiculo"] else None),
+                tipo_vehiculo=tipo_veh,
                 placas=(str(dr["placas"]).strip() if dr["placas"] else None),
                 saldo=float(dr["saldo"] or 0),
                 cajas_total=cajas_total,
@@ -385,7 +397,8 @@ def detallado_movilizacion(
                 d.cantidad_movilizada,
                 d.variedad_movilizada AS variedad_folio,
                 v.descripcion         AS variedad_nombre,
-                d.tipo_vehiculo,
+                d.tipo_vehiculo       AS tipo_vehiculo_folio,
+                veh.descripcion       AS tipo_vehiculo_nombre,
                 d.placas,
                 d.saldo,
                 {granel_expr}         AS granel,
@@ -393,6 +406,7 @@ def detallado_movilizacion(
                 d.status
             FROM detallado_tmimf d
             LEFT JOIN cat_variedades v ON v.folio = d.variedad_movilizada
+            LEFT JOIN cat_vehiculos veh ON veh.folio = d.tipo_vehiculo
             WHERE d.folio_completo = :f
             ORDER BY d.folio ASC
         """),
@@ -405,13 +419,19 @@ def detallado_movilizacion(
             int(dr[c] or 0)
             for c in ("cajas14", "cajas15", "cajas16", "cajas18", "cajas20", "cajas25", "cajas30")
         )
+        veh_nombre = dr["tipo_vehiculo_nombre"]
+        veh_folio = dr["tipo_vehiculo_folio"]
+        tipo_veh = (
+            str(veh_nombre).strip() if veh_nombre
+            else (f"#{veh_folio}" if veh_folio else None)
+        )
         detallado.append(DetalladoRow(
             folio=int(dr["folio"]),
             sub_folio=(str(dr["sub_folio"]).strip() if dr["sub_folio"] is not None else None),
             cantidad_movilizada=float(dr["cantidad_movilizada"] or 0),
             variedad_folio=int(dr["variedad_folio"]) if dr["variedad_folio"] else None,
             variedad_nombre=(str(dr["variedad_nombre"]).strip() if dr["variedad_nombre"] else None),
-            tipo_vehiculo=(str(dr["tipo_vehiculo"]).strip() if dr["tipo_vehiculo"] else None),
+            tipo_vehiculo=tipo_veh,
             placas=(str(dr["placas"]).strip() if dr["placas"] else None),
             saldo=float(dr["saldo"] or 0),
             cajas_total=cajas_total,

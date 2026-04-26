@@ -29,6 +29,7 @@ const DetalladoMovilizacionPage = lazy(() => import('@/pages/legacy/DetalladoMov
 const CancelacionTmimfPage = lazy(() => import('@/pages/legacy/CancelacionTmimfPage'));
 const EditarEstimadoCosechaPage = lazy(() => import('@/pages/legacy/EditarEstimadoCosechaPage'));
 const CatalogosAuxiliaresPage = lazy(() => import('@/pages/legacy/CatalogosAuxiliaresPage'));
+const CatalogoHuertosPage = lazy(() => import('@/pages/legacy/CatalogoHuertosPage'));
 
 export const legacyPublicRoutes = [
   <Route key="legacy-login" path="/legacy/login" element={<LegacyLoginPage />} />,
@@ -65,5 +66,6 @@ export const legacyProtectedRoutes = (
     <Route path="/legacy/correcciones/cancelacion-tmimf" element={<CancelacionTmimfPage />} />
     <Route path="/legacy/correcciones/estimado-cosecha" element={<EditarEstimadoCosechaPage />} />
     <Route path="/legacy/catalogos/auxiliares" element={<CatalogosAuxiliaresPage />} />
+    <Route path="/legacy/catalogos/huertos" element={<CatalogoHuertosPage />} />
   </Route>
 );
