@@ -451,3 +451,47 @@ class CatalogAuxListResponse(BaseModel):
 class CatalogAuxCatalogoMeta(BaseModel):
     slug: str
     label: str
+
+
+# ---------------------------------------------------------------
+# Productores V3 nativos (Sprint 2.1.A)
+# ---------------------------------------------------------------
+
+
+class ProductorBase(BaseModel):
+    tipo_persona: str = Field(min_length=1, max_length=45)
+    rfc: str = Field(min_length=10, max_length=13)
+    razon_social: str | None = Field(default=None, max_length=200)
+    calle: str | None = Field(default=None, max_length=150)
+    numero_interior: str | None = Field(default=None, max_length=45)
+    numero_exterior: str | None = Field(default=None, max_length=45)
+    colonia_id: int | None = None
+    municipio_id: int | None = None
+    estado_id: int | None = None
+    codigo_postal: str | None = Field(default=None, max_length=5)
+    telefono: str | None = Field(default=None, max_length=45)
+    correo_electronico: str | None = Field(default=None, max_length=200)
+    estatus_id: int = 1
+    figura_cooperadora_id: int | None = None
+
+
+class ProductorCreate(ProductorBase):
+    pass
+
+
+class ProductorUpdate(ProductorBase):
+    pass
+
+
+class ProductorResponse(ProductorBase):
+    id: int
+    estado_nombre: str | None = None
+    municipio_nombre: str | None = None
+    figura_cooperadora_nombre: str | None = None
+
+
+class ProductorListResponse(BaseModel):
+    items: list[ProductorResponse]
+    total: int
+    page: int
+    page_size: int

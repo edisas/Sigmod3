@@ -15,6 +15,7 @@ export const PROCESS_NAVIGATION: NavItem[] = [
     children: [{ icon: 'list_alt', label: 'Solicitudes', path: '/solicitudes' }],
   },
   { icon: 'verified_user', label: 'Autorizaciones FCOOP', path: '/autorizaciones/figura-cooperadora/listado' },
+  { icon: 'agriculture', label: 'Productores', path: '/productores' },
   {
     icon: 'inventory_2',
     label: 'Catalogos',
