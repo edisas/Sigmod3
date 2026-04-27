@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
 const TOKEN_KEY = 'sigmod_token';
 
-const initialForm = { clave: '', nombre: '', abreviatura: '', estatus_id: 1 };
+const initialForm = { clave: '', nombre: '', abreviatura: '', estatus_id: 1, participa_sigmod: 1 };
 
 export default function CatalogEstadoFormPage() {
   const navigate = useNavigate();
@@ -28,8 +28,14 @@ export default function CatalogEstadoFormPage() {
         setIsLoading(false);
         return;
       }
-      const data = (await response.json()) as { clave: string; nombre: string; abreviatura: string; estatus_id: number };
-      setForm(data);
+      const data = (await response.json()) as { clave: string; nombre: string; abreviatura: string; estatus_id: number; participa_sigmod?: number };
+      setForm({
+        clave: data.clave,
+        nombre: data.nombre,
+        abreviatura: data.abreviatura,
+        estatus_id: data.estatus_id,
+        participa_sigmod: data.participa_sigmod ?? 1,
+      });
       setIsLoading(false);
     };
     void load();
@@ -44,6 +50,7 @@ export default function CatalogEstadoFormPage() {
       nombre: form.nombre.trim(),
       abreviatura: form.abreviatura.trim().toUpperCase(),
       estatus_id: Number(form.estatus_id),
+      participa_sigmod: Number(form.participa_sigmod) === 1 ? 1 : 0,
     };
     if (!payload.clave || !payload.nombre || !payload.abreviatura) {
       setError('Completa clave, nombre y abreviatura.');
@@ -92,6 +99,19 @@ export default function CatalogEstadoFormPage() {
             <option value={1}>Activo</option>
             <option value={2}>Inactivo</option>
           </select>
+        </div>
+        <div>
+          <label className="block text-sm text-slate-700 mb-1">Participa en SIGMOD</label>
+          <label className="flex items-center gap-2 mt-2">
+            <input
+              type="checkbox"
+              checked={form.participa_sigmod === 1}
+              onChange={(e) => setForm((p) => ({ ...p, participa_sigmod: e.target.checked ? 1 : 0 }))}
+              className="size-4 rounded border-slate-300 text-primary focus:ring-primary"
+            />
+            <span className="text-sm text-slate-700">El estado participa en el proyecto SIGMOD</span>
+          </label>
+          <p className="text-xs text-slate-500 mt-1">Si no participa, no aparecerá en login ni en multi-select de catálogos.</p>
         </div>
 
         <div className="md:col-span-2 flex items-center gap-2 pt-2">

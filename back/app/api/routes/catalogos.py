@@ -76,6 +76,7 @@ def to_estado_response(row: dict[str, Any]) -> CatalogEstadoResponse:
         nombre=str(row["nombre"]),
         abreviatura=str(row["abreviatura"]),
         estatus_id=int(row["estatus_id"]),
+        participa_sigmod=int(row.get("participa_sigmod", 1)),
     )
 
 

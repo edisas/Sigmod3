@@ -183,6 +183,7 @@ class CatalogEstadoBase(BaseModel):
     nombre: str = Field(min_length=1, max_length=45)
     abreviatura: str = Field(min_length=1, max_length=10)
     estatus_id: int = 1
+    participa_sigmod: int = Field(default=1, ge=0, le=1)
 
 
 class CatalogEstadoCreate(CatalogEstadoBase):

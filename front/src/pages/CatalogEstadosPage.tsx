@@ -11,6 +11,7 @@ interface EstadoItem {
   nombre: string;
   abreviatura: string;
   estatus_id: number;
+  participa_sigmod: number;
 }
 
 interface EstadoListResponse {
@@ -101,9 +102,35 @@ export default function CatalogEstadosPage() {
     await load();
   };
 
+  const toggleParticipa = async (item: EstadoItem) => {
+    if (!token) return;
+    const next = item.participa_sigmod === 1 ? 0 : 1;
+    const response = await fetch(`${API_BASE}/catalogos/estados/${item.id}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clave: item.clave,
+        nombre: item.nombre,
+        abreviatura: item.abreviatura,
+        estatus_id: item.estatus_id,
+        participa_sigmod: next,
+      }),
+    });
+    if (!response.ok) {
+      setError('No se pudo cambiar la participación del estado.');
+      return;
+    }
+    await load();
+  };
+
   const exportCurrent = () => {
-    const rows = items.map((i) => [i.id, i.clave, i.nombre, i.abreviatura, i.estatus_id === 1 ? 'Activo' : 'Inactivo']);
-    downloadCsv('catalogo_estados_vista.csv', ['ID', 'Clave', 'Nombre', 'Abreviatura', 'Estatus'], rows);
+    const rows = items.map((i) => [
+      i.id, i.clave, i.nombre, i.abreviatura,
+      i.estatus_id === 1 ? 'Activo' : 'Inactivo',
+      i.participa_sigmod === 1 ? 'Sí' : 'No',
+    ]);
+    downloadCsv('catalogo_estados_vista.csv',
+      ['ID', 'Clave', 'Nombre', 'Abreviatura', 'Estatus', 'Participa'], rows);
     setExportOpen(false);
   };
 
@@ -121,8 +148,13 @@ export default function CatalogEstadosPage() {
       return;
     }
     const data = (await response.json()) as EstadoListResponse;
-    const rows = data.items.map((i) => [i.id, i.clave, i.nombre, i.abreviatura, i.estatus_id === 1 ? 'Activo' : 'Inactivo']);
-    downloadCsv('catalogo_estados_todo.csv', ['ID', 'Clave', 'Nombre', 'Abreviatura', 'Estatus'], rows);
+    const rows = data.items.map((i) => [
+      i.id, i.clave, i.nombre, i.abreviatura,
+      i.estatus_id === 1 ? 'Activo' : 'Inactivo',
+      i.participa_sigmod === 1 ? 'Sí' : 'No',
+    ]);
+    downloadCsv('catalogo_estados_todo.csv',
+      ['ID', 'Clave', 'Nombre', 'Abreviatura', 'Estatus', 'Participa'], rows);
     setExportOpen(false);
   };
 
@@ -205,14 +237,15 @@ export default function CatalogEstadosPage() {
               <th className="text-left px-4 py-3">Nombre</th>
               <th className="text-left px-4 py-3">Abreviatura</th>
               <th className="text-left px-4 py-3">Estatus</th>
+              <th className="text-left px-4 py-3">Participa SIGMOD</th>
               <th className="text-right px-4 py-3">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td className="px-4 py-4 text-slate-500" colSpan={5}>Cargando...</td></tr>
+              <tr><td className="px-4 py-4 text-slate-500" colSpan={6}>Cargando...</td></tr>
             ) : items.length === 0 ? (
-              <tr><td className="px-4 py-4 text-slate-500" colSpan={5}>Sin registros</td></tr>
+              <tr><td className="px-4 py-4 text-slate-500" colSpan={6}>Sin registros</td></tr>
             ) : (
               items.map((item) => (
                 <tr key={item.id} className="border-t border-slate-100">
@@ -220,6 +253,21 @@ export default function CatalogEstadosPage() {
                   <td className="px-4 py-3">{item.nombre}</td>
                   <td className="px-4 py-3">{item.abreviatura}</td>
                   <td className="px-4 py-3">{item.estatus_id === 1 ? 'Activo' : 'Inactivo'}</td>
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => void toggleParticipa(item)}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${
+                        item.participa_sigmod === 1
+                          ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                      title={item.participa_sigmod === 1 ? 'Click para excluir del proyecto' : 'Click para incluir en el proyecto'}
+                    >
+                      <span className={`size-2 rounded-full ${item.participa_sigmod === 1 ? 'bg-emerald-600' : 'bg-slate-400'}`} />
+                      {item.participa_sigmod === 1 ? 'Sí participa' : 'No participa'}
+                    </button>
+                  </td>
                   <td className="px-4 py-3 text-right">
                     <div className="inline-flex gap-2">
                       <button className="rounded-md border border-primary px-2 py-1 text-primary" onClick={() => navigate(`/catalogos/estados/${item.id}/editar`)}>Editar</button>

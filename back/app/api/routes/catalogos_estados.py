@@ -34,7 +34,7 @@ def list_estados(
     rows = db.execute(
         text(
             """
-            SELECT id, clave, nombre, abreviatura, estatus_id
+            SELECT id, clave, nombre, abreviatura, estatus_id, participa_sigmod
             FROM estados
             WHERE (:estatus_id IS NULL OR estatus_id = :estatus_id)
             ORDER BY nombre ASC
@@ -80,7 +80,7 @@ def list_estados_paginado(
     rows = db.execute(
         text(
             """
-            SELECT id, clave, nombre, abreviatura, estatus_id
+            SELECT id, clave, nombre, abreviatura, estatus_id, participa_sigmod
             FROM estados
             WHERE (:estatus_id IS NULL OR estatus_id = :estatus_id)
               AND (
@@ -112,7 +112,7 @@ def get_estado(
 ) -> CatalogEstadoResponse:
     ensure_catalog_access(current_user)
     row = db.execute(
-        text("SELECT id, clave, nombre, abreviatura, estatus_id FROM estados WHERE id = :id"),
+        text("SELECT id, clave, nombre, abreviatura, estatus_id, participa_sigmod FROM estados WHERE id = :id"),
         {"id": estado_id},
     ).mappings().first()
     if not row:
@@ -132,8 +132,8 @@ def create_estado(
     result = db.execute(
         text(
             """
-            INSERT INTO estados (clave, nombre, abreviatura, estatus_id)
-            VALUES (:clave, :nombre, :abreviatura, :estatus_id)
+            INSERT INTO estados (clave, nombre, abreviatura, estatus_id, participa_sigmod)
+            VALUES (:clave, :nombre, :abreviatura, :estatus_id, :participa_sigmod)
             """
         ),
         payload.model_dump(),
@@ -165,7 +165,7 @@ def update_estado(
 ) -> CatalogEstadoResponse:
     ensure_catalog_access(current_user)
     previous = db.execute(
-        text("SELECT id, clave, nombre, abreviatura, estatus_id FROM estados WHERE id = :id"),
+        text("SELECT id, clave, nombre, abreviatura, estatus_id, participa_sigmod FROM estados WHERE id = :id"),
         {"id": estado_id},
     ).mappings().first()
     if not previous:
@@ -175,7 +175,8 @@ def update_estado(
         text(
             """
             UPDATE estados
-            SET clave = :clave, nombre = :nombre, abreviatura = :abreviatura, estatus_id = :estatus_id
+            SET clave = :clave, nombre = :nombre, abreviatura = :abreviatura,
+                estatus_id = :estatus_id, participa_sigmod = :participa_sigmod
             WHERE id = :id
             """
         ),
