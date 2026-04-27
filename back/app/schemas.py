@@ -550,3 +550,69 @@ class UnidadProduccionListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+# ---------------------------------------------------------------
+# Módulos V3 (Sprint 2.2) — lectura por ahora; CRUD full pendiente.
+# ---------------------------------------------------------------
+
+
+class ModuloOptionResponse(BaseModel):
+    id: int
+    nombre: str
+    estado_id: int | None = None
+    municipio_id: int | None = None
+    estatus_id: int = 1
+    estado_nombre: str | None = None
+
+
+class ModuloListResponse(BaseModel):
+    items: list[ModuloOptionResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+# ---------------------------------------------------------------
+# Rutas de trampeo V3 (Sprint 2.2)
+# ---------------------------------------------------------------
+
+
+class RutaBase(BaseModel):
+    nombre: str = Field(min_length=1, max_length=50)
+    modulo_id: int | None = None
+    pfa_id: int | None = None
+    fecha_primera_revision: date | None = None
+    dia_revision: str | None = Field(default=None, max_length=10)
+    tipo_folio: str | None = Field(default=None, max_length=10)
+    inicial_ruta: str | None = Field(default=None, max_length=50)
+    descripcion: str | None = Field(default=None, max_length=200)
+    capturista_id: int | None = None
+    trampero_id: int | None = None
+    figura_cooperadora_id: int | None = None
+    estado_id: int | None = None
+    estatus_id: int = 1
+
+
+class RutaCreate(RutaBase):
+    pass
+
+
+class RutaUpdate(RutaBase):
+    pass
+
+
+class RutaResponse(RutaBase):
+    id: int
+    estado_nombre: str | None = None
+    modulo_nombre: str | None = None
+    capturista_nombre: str | None = None
+    trampero_nombre: str | None = None
+    figura_cooperadora_nombre: str | None = None
+
+
+class RutaListResponse(BaseModel):
+    items: list[RutaResponse]
+    total: int
+    page: int
+    page_size: int

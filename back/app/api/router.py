@@ -6,7 +6,9 @@ from app.api.routes import (
     catalogos,
     configuracion_sistema,
     health,
+    modulos,
     productores,
+    rutas,
     solicitudes,
     unidades_produccion,
 )
@@ -21,4 +23,6 @@ router.include_router(autorizaciones.router, prefix="/autorizaciones", tags=["au
 router.include_router(configuracion_sistema.router, prefix="/configuracion-sistema", tags=["configuracion_sistema"])
 router.include_router(productores.router, prefix="/productores", tags=["productores"])
 router.include_router(unidades_produccion.router, prefix="/unidades-produccion", tags=["unidades_produccion"])
+router.include_router(modulos.router, prefix="/modulos", tags=["modulos"])
+router.include_router(rutas.router, prefix="/rutas", tags=["rutas"])
 router.include_router(legacy_router, prefix="/legacy")
