@@ -20,12 +20,19 @@
 START TRANSACTION;
 
 -- Columnas nuevas
+-- Nota: figura_cooperadora_id es INT signed (no UNSIGNED) para match con
+-- figura_cooperadora.id (que es INT(11) signed por una migración legacy
+-- previa). Sin esto la FK falla con errno 150.
 ALTER TABLE productores
   ADD COLUMN IF NOT EXISTS estatus_id INT UNSIGNED NOT NULL DEFAULT 1 AFTER correo_electronico,
-  ADD COLUMN IF NOT EXISTS figura_cooperadora_id INT UNSIGNED NULL AFTER estatus_id,
+  ADD COLUMN IF NOT EXISTS figura_cooperadora_id INT NULL AFTER estatus_id,
   ADD COLUMN IF NOT EXISTS created_by_user_id INT UNSIGNED NULL AFTER figura_cooperadora_id,
   ADD COLUMN IF NOT EXISTS updated_by_user_id INT UNSIGNED NULL AFTER created_by_user_id,
   ADD COLUMN IF NOT EXISTS updated_at DATETIME NULL ON UPDATE CURRENT_TIMESTAMP AFTER created_at;
+
+-- Si la columna ya existía como UNSIGNED del deploy anterior fallido,
+-- forzarla a SIGNED INT(11) para que coincida con figura_cooperadora.id.
+ALTER TABLE productores MODIFY COLUMN figura_cooperadora_id INT(11) NULL;
 
 -- Índices y unique
 ALTER TABLE productores
