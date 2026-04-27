@@ -102,7 +102,11 @@ def load_user_states(db: Session, user_id: int) -> list[State]:
     return (
         db.query(State)
         .join(UserState, UserState.estado_id == State.id)
-        .filter(UserState.usuario_id == user_id, UserState.estatus_id == 1)
+        .filter(
+            UserState.usuario_id == user_id,
+            UserState.estatus_id == 1,
+            State.estatus_id == 1,
+        )
         .order_by(State.nombre.asc())
         .all()
     )
@@ -354,11 +358,12 @@ def select_state(payload: SelectStateRequest, db: Session = Depends(get_db)) -> 
             UserState.usuario_id == user.id,
             UserState.estado_id == payload.estado_id,
             UserState.estatus_id == 1,
+            State.estatus_id == 1,
         )
         .first()
     )
     if not state:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes acceso al estado seleccionado")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes acceso al estado seleccionado o el estado está inactivo")
 
     access_token = create_access_token(subject=str(user.id), estado_activo_id=state.id, scope="access")
     user_states = load_user_states(db, user.id)
