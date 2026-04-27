@@ -16,6 +16,7 @@ export const PROCESS_NAVIGATION: NavItem[] = [
   },
   { icon: 'verified_user', label: 'Autorizaciones FCOOP', path: '/autorizaciones/figura-cooperadora/listado' },
   { icon: 'agriculture', label: 'Productores', path: '/productores' },
+  { icon: 'forest', label: 'Unidades de producción', path: '/unidades-produccion' },
   {
     icon: 'inventory_2',
     label: 'Catalogos',

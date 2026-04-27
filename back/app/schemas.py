@@ -495,3 +495,58 @@ class ProductorListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+# ---------------------------------------------------------------
+# Unidades de producción V3 (Sprint 2.1.B)
+# La tabla legacy tiene 60+ columnas; aquí exponemos los campos
+# esenciales para captura. El resto se mantiene para compatibilidad
+# y se irá agregando por necesidad.
+# ---------------------------------------------------------------
+
+
+class UnidadProduccionBase(BaseModel):
+    numero_inscripcion: str = Field(min_length=1, max_length=20)
+    nombre_unidad: str | None = Field(default=None, max_length=100)
+    productor_id: int | None = None
+    figura_cooperadora_id: int | None = None
+    nombre_propietario: str | None = Field(default=None, max_length=100)
+    direccion: str | None = Field(default=None, max_length=150)
+    telefono: str | None = Field(default=None, max_length=30)
+    ubicacion: str | None = Field(default=None, max_length=150)
+    municipio: str | None = Field(default=None, max_length=100)
+    zona: str | None = Field(default=None, max_length=100)
+    estado_id: int | None = None
+    municipio_id: int | None = None
+    especie_id: int | None = None
+    tipo_unidad_id: int | None = None
+    ruta_id: int | None = None
+    mercado_id: int | None = None
+    aprobado_exportacion: int = Field(default=0, ge=0, le=1)
+    htl: int = Field(default=0, ge=0, le=1)
+    activo: int = Field(default=1, ge=0, le=1)
+    observaciones_sv02: str | None = Field(default=None, max_length=100)
+    estatus_id: int = 1
+
+
+class UnidadProduccionCreate(UnidadProduccionBase):
+    pass
+
+
+class UnidadProduccionUpdate(UnidadProduccionBase):
+    pass
+
+
+class UnidadProduccionResponse(UnidadProduccionBase):
+    id: int
+    productor_nombre: str | None = None
+    figura_cooperadora_nombre: str | None = None
+    estado_nombre: str | None = None
+    municipio_nombre: str | None = None
+
+
+class UnidadProduccionListResponse(BaseModel):
+    items: list[UnidadProduccionResponse]
+    total: int
+    page: int
+    page_size: int
