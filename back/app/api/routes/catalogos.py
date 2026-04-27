@@ -19,7 +19,7 @@ from app.schemas import (
 
 router = APIRouter()
 
-ALLOWED_ROLES = {"administrador general", "administrador estatal", "admin"}
+ALLOWED_ROLES = {"administrador general", "administrador estatal", "admin", "administrador senasica"}
 
 
 def ensure_catalog_access(current_user: User) -> None:

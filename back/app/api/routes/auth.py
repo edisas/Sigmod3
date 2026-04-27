@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.rate_limit import rate_limit
 from app.core.security import create_access_token, decode_token, hash_password, verify_password
+from app.core.senasica import audit_senasica, is_senasica
 from app.db import get_db
 from app.dependencies import get_current_state_id, get_current_user
 from app.models import State, User, UserState
@@ -14,6 +15,7 @@ from app.schemas import (
     RegisterRequest,
     SelectStateRequest,
     StateResponse,
+    SwitchStateRequest,
     TokenResponse,
     UserResponse,
 )
@@ -139,10 +141,37 @@ def load_figuras_vigentes_para_registro(db: Session) -> list[dict]:
 
 
 def build_login_response(user: User, states: list[State]) -> TokenResponse:
+    user_payload = to_user_response(user)
+
+    # Senasica entra sin selección de estado: se autoasigna el primer estado activo
+    # y participante del catálogo, sin importar las asignaciones de usuarios_detalle.
+    # El selector dinámico del dashboard le permite cambiar.
+    if is_senasica(user):
+        from sqlalchemy.orm import object_session  # local import
+
+        db = object_session(user)
+        national_states = (
+            db.query(State)
+            .filter(State.estatus_id == 1, State.participa_sigmod == 1)
+            .order_by(State.nombre.asc())
+            .all()
+        ) if db is not None else []
+        if not national_states:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No hay estados activos y participantes")
+        active_state = to_state_response(national_states[0])
+        token = create_access_token(subject=str(user.id), estado_activo_id=active_state.id, scope="access")
+        return TokenResponse(
+            access_token=token,
+            token_type="bearer",
+            requires_state_selection=False,
+            available_states=[to_state_response(s) for s in national_states],
+            active_state=active_state,
+            user=user_payload,
+        )
+
     if not states:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usuario sin estados asignados")
 
-    user_payload = to_user_response(user)
     states_payload = [to_state_response(state) for state in states]
 
     if len(states_payload) == 1:
@@ -379,9 +408,79 @@ def select_state(payload: SelectStateRequest, db: Session = Depends(get_db)) -> 
     )
 
 
+@router.post("/switch-state", response_model=TokenResponse)
+def switch_state(
+    payload: SwitchStateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_state_id: int = Depends(get_current_state_id),
+) -> TokenResponse:
+    """Permite a un Senasica cambiar dinámicamente el estado activo del JWT.
+
+    Solo accesible para rol Administrador Senasica. Otros roles deben re-loguearse
+    para cambiar de estado.
+    """
+    if not is_senasica(current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo Administrador Senasica puede cambiar de estado dinámicamente")
+
+    state = (
+        db.query(State)
+        .filter(State.id == payload.estado_id, State.estatus_id == 1, State.participa_sigmod == 1)
+        .first()
+    )
+    if not state:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Estado no existe, está inactivo o no participa en SIGMOD")
+
+    new_token = create_access_token(subject=str(current_user.id), estado_activo_id=state.id, scope="access")
+
+    audit_senasica(
+        db,
+        user=current_user,
+        accion="switch-state",
+        metodo="POST",
+        path="/auth/switch-state",
+        estado_afectado_id=state.id,
+        recurso_tipo="estado_activo",
+        recurso_id=str(state.id),
+        datos_request={"estado_id_anterior": current_state_id, "estado_id_nuevo": state.id, "estado_nombre": state.nombre},
+        resultado_status=200,
+        ip_origen=request.client.host if request.client else None,
+        observaciones=f"Cambio de estado activo: {current_state_id} -> {state.id}",
+    )
+    db.commit()
+
+    available = (
+        db.query(State)
+        .filter(State.estatus_id == 1, State.participa_sigmod == 1)
+        .order_by(State.nombre.asc())
+        .all()
+    )
+    return TokenResponse(
+        access_token=new_token,
+        token_type="bearer",
+        requires_state_selection=False,
+        available_states=[to_state_response(s) for s in available],
+        active_state=to_state_response(state),
+        user=to_user_response(current_user),
+    )
+
+
+def _states_for_user(db: Session, user: User) -> list[State]:
+    """Senasica ve todos los estados activos+participantes; resto, solo los asignados."""
+    if is_senasica(user):
+        return (
+            db.query(State)
+            .filter(State.estatus_id == 1, State.participa_sigmod == 1)
+            .order_by(State.nombre.asc())
+            .all()
+        )
+    return load_user_states(db, user.id)
+
+
 @router.get("/me", response_model=MeResponse)
 def me(current_user: User = Depends(get_current_user), current_state_id: int = Depends(get_current_state_id), db: Session = Depends(get_db)) -> MeResponse:
-    user_states = load_user_states(db, current_user.id)
+    user_states = _states_for_user(db, current_user)
     active_state = next((state for state in user_states if state.id == current_state_id), None)
 
     return MeResponse(

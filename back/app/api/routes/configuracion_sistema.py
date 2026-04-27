@@ -17,7 +17,7 @@ SYSTEM_DIR = BASE_DIR / "storage" / "system"
 ASSETS_DIR = SYSTEM_DIR / "assets"
 CONFIG_FILE = SYSTEM_DIR / "system_config.json"
 
-ADMIN_GENERAL_ROLES = {"admin", "administrador general"}
+ADMIN_GENERAL_ROLES = {"admin", "administrador general", "administrador senasica"}
 
 
 def _ensure_paths() -> None:

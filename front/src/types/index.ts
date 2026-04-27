@@ -6,7 +6,7 @@ export interface User {
   id: string;
   fullName: string;
   email: string;
-  role: 'admin' | 'agronomist' | 'viewer';
+  role: string;
   avatar?: string;
   initials: string;
   phone?: string;
@@ -15,10 +15,19 @@ export interface User {
   sector?: string;
 }
 
+export interface AvailableState {
+  id: number;
+  clave: string;
+  nombre: string;
+}
+
 export interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  activeStateId: number | null;
+  activeStateName: string | null;
+  availableStates: AvailableState[];
 }
 
 export interface NavItem {

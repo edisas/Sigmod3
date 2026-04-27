@@ -135,8 +135,8 @@ CATALOGOS_AUX: dict[str, CatalogoAuxSpec] = {
 # ----------------------------------------------------------------------
 
 
-READ_ROLES = {"administrador general", "administrador estatal", "admin"}
-WRITE_ROLES = {"administrador general", "admin"}
+READ_ROLES = {"administrador general", "administrador estatal", "admin", "administrador senasica"}
+WRITE_ROLES = {"administrador general", "admin", "administrador senasica"}
 
 
 def _ensure_read_access(user: User) -> None:

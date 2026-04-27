@@ -23,6 +23,10 @@ class SelectStateRequest(BaseModel):
     estado_id: int
 
 
+class SwitchStateRequest(BaseModel):
+    estado_id: int
+
+
 class StateResponse(BaseModel):
     id: int
     clave: str

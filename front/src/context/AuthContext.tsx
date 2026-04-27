@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
-import type { User, AuthState } from '@/types';
+import type { User, AuthState, AvailableState } from '@/types';
+
+const SENASICA_ROLE = 'administrador senasica';
 
 interface LoginResult {
   success: boolean;
@@ -20,6 +22,8 @@ interface AuthContextType extends AuthState {
     figuraCooperadoraId?: number | null;
   }) => Promise<LoginResult>;
   completeStateSelection: (estadoId: number) => Promise<LoginResult>;
+  switchState: (estadoId: number) => Promise<{ success: boolean; error?: string }>;
+  isSenasica: boolean;
 }
 
 const STATE_SELECT_TOKEN_KEY = 'sigmod_state_select_token';
@@ -43,17 +47,20 @@ interface ApiUser {
   sector?: string;
 }
 
-interface MeApiResponse {
-  user: ApiUser;
-}
-
 interface AuthApiResponse {
   access_token: string | null;
   token_type: string | null;
   requires_state_selection?: boolean;
   state_selection_token?: string | null;
-  available_states?: Array<{ id: number; clave: string; nombre: string }>;
+  available_states?: AvailableState[];
+  active_state?: AvailableState | null;
   user: ApiUser;
+}
+
+interface MeFullResponse {
+  user: ApiUser;
+  active_state?: AvailableState | null;
+  available_states?: AvailableState[];
 }
 
 function toUser(raw: ApiUser): User {
@@ -131,6 +138,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user: null,
     isAuthenticated: false,
     isLoading: true,
+    activeStateId: null,
+    activeStateName: null,
+    availableStates: [],
   });
 
   // setState en early-return y bootstrap es patrón legítimo de "cargar sesión
@@ -146,14 +156,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const bootstrap = async () => {
       setState((prev) => ({ ...prev, isLoading: true }));
       try {
-        const me = await apiRequest<ApiUser | MeApiResponse>('/auth/me', {
+        const me = await apiRequest<MeFullResponse | ApiUser>('/auth/me', {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const user = 'user' in me ? me.user : me;
-        setState({ user: toUser(user), isAuthenticated: true, isLoading: false });
+        const apiUser = 'user' in me ? me.user : me;
+        const activeState = 'active_state' in me ? (me.active_state ?? null) : null;
+        const availableStates = ('available_states' in me ? me.available_states : null) ?? [];
+        setState({
+          user: toUser(apiUser),
+          isAuthenticated: true,
+          isLoading: false,
+          activeStateId: activeState?.id ?? null,
+          activeStateName: activeState?.nombre ?? null,
+          availableStates,
+        });
       } catch {
         localStorage.removeItem(TOKEN_KEY);
-        setState({ user: null, isAuthenticated: false, isLoading: false });
+        setState({ user: null, isAuthenticated: false, isLoading: false, activeStateId: null, activeStateName: null, availableStates: [] });
       }
     };
 
@@ -199,7 +218,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       localStorage.setItem(TOKEN_KEY, accessToken);
-      setState({ user: toUser(data.user), isAuthenticated: true, isLoading: false });
+      setState({
+        user: toUser(data.user),
+        isAuthenticated: true,
+        isLoading: false,
+        activeStateId: data.active_state?.id ?? null,
+        activeStateName: data.active_state?.nombre ?? null,
+        availableStates: data.available_states ?? [],
+      });
       let redirectTo = '/';
       try {
         const hint = await apiRequest<{ redirect_to?: string }>('/solicitudes/routing-hint', {
@@ -238,7 +264,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sessionStorage.removeItem(STATE_SELECT_STATES_KEY);
       sessionStorage.removeItem(STATE_SELECT_USER_KEY);
       const userData = selected.user ?? (JSON.parse(userRaw) as ApiUser);
-      setState({ user: toUser(userData), isAuthenticated: true, isLoading: false });
+      setState({
+        user: toUser(userData),
+        isAuthenticated: true,
+        isLoading: false,
+        activeStateId: selected.active_state?.id ?? null,
+        activeStateName: selected.active_state?.nombre ?? null,
+        availableStates: selected.available_states ?? [],
+      });
       let redirectTo = '/';
       try {
         const hint = await apiRequest<{ redirect_to?: string }>('/solicitudes/routing-hint', {
@@ -258,7 +291,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
-    setState({ user: null, isAuthenticated: false, isLoading: false });
+    setState({
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
+      activeStateId: null,
+      activeStateName: null,
+      availableStates: [],
+    });
+  }, []);
+
+  const switchState = useCallback(async (estadoId: number): Promise<{ success: boolean; error?: string }> => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) return { success: false, error: 'No autenticado.' };
+    try {
+      const resp = await apiRequest<AuthApiResponse>('/auth/switch-state', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ estado_id: estadoId }),
+      });
+      if (!resp.access_token) return { success: false, error: 'Respuesta inválida del servidor.' };
+      localStorage.setItem(TOKEN_KEY, resp.access_token);
+      setState((prev) => ({
+        ...prev,
+        activeStateId: resp.active_state?.id ?? prev.activeStateId,
+        activeStateName: resp.active_state?.nombre ?? prev.activeStateName,
+        availableStates: resp.available_states ?? prev.availableStates,
+      }));
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: describeAuthError(err, 'No se pudo cambiar de estado.') };
+    }
   }, []);
 
   const register = useCallback(async (data: {
@@ -301,7 +364,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       localStorage.setItem(TOKEN_KEY, accessToken);
-      setState({ user: toUser(response.user), isAuthenticated: true, isLoading: false });
+      setState({
+        user: toUser(response.user),
+        isAuthenticated: true,
+        isLoading: false,
+        activeStateId: response.active_state?.id ?? null,
+        activeStateName: response.active_state?.nombre ?? null,
+        availableStates: response.available_states ?? [],
+      });
       return { success: true, redirectTo: '/solicitud-acceso?new=1' };
     } catch (err) {
       setState((prev) => ({ ...prev, isLoading: false }));
@@ -311,7 +381,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, register, completeStateSelection }}>
+    <AuthContext.Provider value={{
+      ...state,
+      login,
+      logout,
+      register,
+      completeStateSelection,
+      switchState,
+      isSenasica: (state.user?.role ?? '').trim().toLowerCase() === SENASICA_ROLE,
+    }}>
       {children}
     </AuthContext.Provider>
   );

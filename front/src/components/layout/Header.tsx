@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import Icon from '@/components/ui/Icon';
+import StateSelector from '@/components/layout/StateSelector';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { useDebounce } from '@/hooks';
@@ -47,6 +48,9 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
 
       {/* Right side */}
       <div className="flex items-center gap-2 sm:gap-4">
+        {/* Selector de estado activo (Senasica multi-estado o read-only) */}
+        <StateSelector />
+
         {/* Theme toggle */}
         <button
           onClick={toggle}
