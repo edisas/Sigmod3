@@ -40,26 +40,38 @@ ALTER TABLE productores
 -- FKs (idempotente: chequear information_schema antes de agregar)
 SET @fk_exists := (SELECT COUNT(*) FROM information_schema.referential_constraints WHERE constraint_schema=DATABASE() AND constraint_name='fk_productores_estatus');
 SET @fk_sql := IF(@fk_exists=0, 'ALTER TABLE productores ADD CONSTRAINT fk_productores_estatus FOREIGN KEY (estatus_id) REFERENCES estatus(id) ON UPDATE CASCADE', 'SELECT 1');
-PREPARE stmt FROM @fk_sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+PREPARE stmt FROM @fk_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 SET @fk_exists := (SELECT COUNT(*) FROM information_schema.referential_constraints WHERE constraint_schema=DATABASE() AND constraint_name='fk_productores_estado');
 SET @fk_sql := IF(@fk_exists=0, 'ALTER TABLE productores ADD CONSTRAINT fk_productores_estado FOREIGN KEY (estado_id) REFERENCES estados(id) ON UPDATE CASCADE', 'SELECT 1');
-PREPARE stmt FROM @fk_sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+PREPARE stmt FROM @fk_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 SET @fk_exists := (SELECT COUNT(*) FROM information_schema.referential_constraints WHERE constraint_schema=DATABASE() AND constraint_name='fk_productores_municipio');
 SET @fk_sql := IF(@fk_exists=0, 'ALTER TABLE productores ADD CONSTRAINT fk_productores_municipio FOREIGN KEY (municipio_id) REFERENCES municipios(id) ON UPDATE CASCADE', 'SELECT 1');
-PREPARE stmt FROM @fk_sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+PREPARE stmt FROM @fk_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 SET @fk_exists := (SELECT COUNT(*) FROM information_schema.referential_constraints WHERE constraint_schema=DATABASE() AND constraint_name='fk_productores_figura');
 SET @fk_sql := IF(@fk_exists=0, 'ALTER TABLE productores ADD CONSTRAINT fk_productores_figura FOREIGN KEY (figura_cooperadora_id) REFERENCES figura_cooperadora(id) ON UPDATE CASCADE', 'SELECT 1');
-PREPARE stmt FROM @fk_sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+PREPARE stmt FROM @fk_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 SET @fk_exists := (SELECT COUNT(*) FROM information_schema.referential_constraints WHERE constraint_schema=DATABASE() AND constraint_name='fk_productores_created_by');
 SET @fk_sql := IF(@fk_exists=0, 'ALTER TABLE productores ADD CONSTRAINT fk_productores_created_by FOREIGN KEY (created_by_user_id) REFERENCES usuarios(id) ON UPDATE CASCADE', 'SELECT 1');
-PREPARE stmt FROM @fk_sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+PREPARE stmt FROM @fk_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 SET @fk_exists := (SELECT COUNT(*) FROM information_schema.referential_constraints WHERE constraint_schema=DATABASE() AND constraint_name='fk_productores_updated_by');
 SET @fk_sql := IF(@fk_exists=0, 'ALTER TABLE productores ADD CONSTRAINT fk_productores_updated_by FOREIGN KEY (updated_by_user_id) REFERENCES usuarios(id) ON UPDATE CASCADE', 'SELECT 1');
-PREPARE stmt FROM @fk_sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+PREPARE stmt FROM @fk_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 COMMIT;
