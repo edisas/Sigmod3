@@ -47,6 +47,7 @@ class State(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     clave: Mapped[str] = mapped_column(String(2), nullable=False)
     nombre: Mapped[str] = mapped_column(String(45), nullable=False)
+    estatus_id: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     usuarios_asignados: Mapped[list["UserState"]] = relationship(back_populates="estado")
 
