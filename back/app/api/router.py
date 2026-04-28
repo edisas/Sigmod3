@@ -6,8 +6,10 @@ from app.api.routes import (
     catalogos,
     configuracion_sistema,
     health,
+    identificaciones,
     modulos,
     productores,
+    revisiones,
     rutas,
     solicitudes,
     tipos_trampa,
@@ -31,4 +33,6 @@ router.include_router(rutas.router, prefix="/rutas", tags=["rutas"])
 router.include_router(tramperos.router, prefix="/tramperos", tags=["tramperos"])
 router.include_router(tipos_trampa.router, prefix="/tipos-trampa", tags=["tipos_trampa"])
 router.include_router(trampas.router, prefix="/trampas", tags=["trampas"])
+router.include_router(revisiones.router, prefix="/revisiones", tags=["revisiones"])
+router.include_router(identificaciones.router, prefix="/identificaciones", tags=["identificaciones"])
 router.include_router(legacy_router, prefix="/legacy")

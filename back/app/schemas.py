@@ -730,3 +730,87 @@ class TrampaListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+# ---------------------------------------------------------------
+# Revisiones de trampas V3 (Sprint 2.3.B) — captura semanal
+# ---------------------------------------------------------------
+
+
+class RevisionBase(BaseModel):
+    trampa_id: int
+    numero_semana: int | None = Field(default=None, ge=1, le=53)
+    fecha_revision: date | None = None
+    status_revision_id: int | None = None
+    tipo_producto: int | None = None
+    dias_exposicion: int | None = Field(default=None, ge=0)
+    observaciones: str | None = Field(default=None, max_length=200)
+    validado: int = Field(default=0, ge=0, le=1)
+    estatus_id: int = 1
+
+
+class RevisionCreate(RevisionBase):
+    pass
+
+
+class RevisionUpdate(RevisionBase):
+    pass
+
+
+class RevisionResponse(RevisionBase):
+    id: int
+    trampa_numero: str | None = None
+    trampa_estado_id: int | None = None
+    status_revision_nombre: str | None = None
+
+
+class RevisionListResponse(BaseModel):
+    items: list[RevisionResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+# ---------------------------------------------------------------
+# Identificaciones de trampa V3 (Sprint 2.3.B)
+# Una por revisión × especie de mosca con conteos hembras/machos
+# silvestre y estéril.
+# ---------------------------------------------------------------
+
+
+class IdentificacionBase(BaseModel):
+    revision_id: int
+    trampa_id: int | None = None
+    numero_semana: int | None = Field(default=None, ge=1, le=53)
+    especie_mosca_id: int | None = None
+    hembras_silvestre: int = Field(default=0, ge=0)
+    machos_silvestre: int = Field(default=0, ge=0)
+    hembras_esteril: int = Field(default=0, ge=0)
+    machos_esteril: int = Field(default=0, ge=0)
+    tecnico_id: int | None = None
+    fecha: date | None = None
+    hora: str | None = None
+    estatus_id: int = 1
+
+
+class IdentificacionCreate(IdentificacionBase):
+    pass
+
+
+class IdentificacionUpdate(IdentificacionBase):
+    pass
+
+
+class IdentificacionResponse(IdentificacionBase):
+    id: int
+    trampa_numero: str | None = None
+    trampa_estado_id: int | None = None
+    especie_mosca_nombre: str | None = None
+    tecnico_nombre: str | None = None
+
+
+class IdentificacionListResponse(BaseModel):
+    items: list[IdentificacionResponse]
+    total: int
+    page: int
+    page_size: int

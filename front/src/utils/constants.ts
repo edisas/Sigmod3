@@ -20,6 +20,8 @@ export const PROCESS_NAVIGATION: NavItem[] = [
   { icon: 'route', label: 'Rutas de trampeo', path: '/rutas' },
   { icon: 'engineering', label: 'Tramperos', path: '/tramperos' },
   { icon: 'pest_control', label: 'Trampas', path: '/trampas' },
+  { icon: 'fact_check', label: 'Revisiones', path: '/revisiones' },
+  { icon: 'science', label: 'Identificaciones', path: '/identificaciones' },
   {
     icon: 'inventory_2',
     label: 'Catalogos',
