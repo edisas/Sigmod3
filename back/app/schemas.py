@@ -616,3 +616,117 @@ class RutaListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+# ---------------------------------------------------------------
+# Tramperos V3 (Sprint 2.3.A)
+# ---------------------------------------------------------------
+
+
+class TramperoBase(BaseModel):
+    nombre: str = Field(min_length=1, max_length=50)
+    estado_id: int | None = None
+    figura_cooperadora_id: int | None = None
+    estatus_id: int = 1
+
+
+class TramperoCreate(TramperoBase):
+    pass
+
+
+class TramperoUpdate(TramperoBase):
+    pass
+
+
+class TramperoResponse(TramperoBase):
+    id: int
+    estado_nombre: str | None = None
+    figura_cooperadora_nombre: str | None = None
+
+
+class TramperoListResponse(BaseModel):
+    items: list[TramperoResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+# ---------------------------------------------------------------
+# Tipos de trampa V3 (Sprint 2.3.A) — catálogo nacional
+# ---------------------------------------------------------------
+
+
+class TipoTrampaBase(BaseModel):
+    nombre: str = Field(min_length=1, max_length=25)
+    descripcion: str | None = Field(default=None, max_length=200)
+    estatus_id: int = 1
+
+
+class TipoTrampaCreate(TipoTrampaBase):
+    pass
+
+
+class TipoTrampaUpdate(TipoTrampaBase):
+    pass
+
+
+class TipoTrampaResponse(TipoTrampaBase):
+    id: int
+
+
+class TipoTrampaListResponse(BaseModel):
+    items: list[TipoTrampaResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+# ---------------------------------------------------------------
+# Trampas V3 (Sprint 2.3.A) — recurso operativo
+# ---------------------------------------------------------------
+
+
+class TrampaBase(BaseModel):
+    numero_trampa: str = Field(min_length=1, max_length=50)
+    numero_trampa_ref: str | None = Field(default=None, max_length=15)
+    ruta_id: int | None = None
+    unidad_produccion_id: int | None = None
+    figura_cooperadora_id: int | None = None
+    tecnico_id: int | None = None
+    hospedero_id: int | None = None
+    area_id: int | None = None
+    tipo_trampa_id: int | None = None
+    latitud: float | None = None
+    longitud: float | None = None
+    altitud: int | None = None
+    fecha_colocacion: date | None = None
+    fecha_ultima_revision: date | None = None
+    estado_id: int | None = None
+    estatus_id: int = 1
+
+
+class TrampaCreate(TrampaBase):
+    pass
+
+
+class TrampaUpdate(TrampaBase):
+    pass
+
+
+class TrampaResponse(TrampaBase):
+    id: int
+    estado_nombre: str | None = None
+    ruta_nombre: str | None = None
+    unidad_produccion_nombre: str | None = None
+    unidad_produccion_ni: str | None = None
+    tipo_trampa_nombre: str | None = None
+    tecnico_nombre: str | None = None
+    hospedero_nombre: str | None = None
+    figura_cooperadora_nombre: str | None = None
+
+
+class TrampaListResponse(BaseModel):
+    items: list[TrampaResponse]
+    total: int
+    page: int
+    page_size: int

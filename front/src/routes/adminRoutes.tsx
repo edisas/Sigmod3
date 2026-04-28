@@ -26,6 +26,9 @@ const SelectStatePage = lazy(() => import('@/pages/SelectStatePage'));
 const ProductoresPage = lazy(() => import('@/pages/ProductoresPage'));
 const UnidadesProduccionPage = lazy(() => import('@/pages/UnidadesProduccionPage'));
 const RutasPage = lazy(() => import('@/pages/RutasPage'));
+const TramperosPage = lazy(() => import('@/pages/TramperosPage'));
+const TiposTrampaPage = lazy(() => import('@/pages/TiposTrampaPage'));
+const TrampasPage = lazy(() => import('@/pages/TrampasPage'));
 const FiguraCooperadoraAutorizacionPage = lazy(() => import('@/pages/FiguraCooperadoraAutorizacionPage'));
 const AutorizacionesFcoopListPage = lazy(() => import('@/pages/AutorizacionesFcoopListPage'));
 const SystemConfigPage = lazy(() => import('@/pages/SystemConfigPage'));
@@ -72,6 +75,9 @@ export const adminProtectedRoutes = (
     <Route path="/productores" element={<ProductoresPage />} />
     <Route path="/unidades-produccion" element={<UnidadesProduccionPage />} />
     <Route path="/rutas" element={<RutasPage />} />
+    <Route path="/tramperos" element={<TramperosPage />} />
+    <Route path="/tipos-trampa" element={<TiposTrampaPage />} />
+    <Route path="/trampas" element={<TrampasPage />} />
     <Route path="/configuracion/sistema" element={<SystemConfigPage />} />
     <Route path="/configuracion/menus" element={<MenuSettingsPage />} />
     <Route path="/autorizaciones/figura-cooperadora/listado" element={<AutorizacionesFcoopListPage />} />

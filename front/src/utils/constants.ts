@@ -18,6 +18,8 @@ export const PROCESS_NAVIGATION: NavItem[] = [
   { icon: 'agriculture', label: 'Productores', path: '/productores' },
   { icon: 'forest', label: 'Unidades de producción', path: '/unidades-produccion' },
   { icon: 'route', label: 'Rutas de trampeo', path: '/rutas' },
+  { icon: 'engineering', label: 'Tramperos', path: '/tramperos' },
+  { icon: 'pest_control', label: 'Trampas', path: '/trampas' },
   {
     icon: 'inventory_2',
     label: 'Catalogos',
@@ -41,6 +43,7 @@ export const ADMIN_NAVIGATION: NavItem[] = [
           { icon: 'location_city', label: 'Municipios', path: '/catalogos/municipios' },
           { icon: 'place', label: 'Localidades', path: '/catalogos/localidades' },
           { icon: 'category', label: 'Auxiliares', path: '/catalogos/auxiliares' },
+          { icon: 'bug_report', label: 'Tipos de trampa', path: '/tipos-trampa' },
         ],
       },
       { icon: 'menu_open', label: 'Configuración de Menus', path: '/configuracion/menus' },

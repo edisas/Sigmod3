@@ -10,6 +10,9 @@ from app.api.routes import (
     productores,
     rutas,
     solicitudes,
+    tipos_trampa,
+    trampas,
+    tramperos,
     unidades_produccion,
 )
 from app.api.routes.legacy import router as legacy_router
@@ -25,4 +28,7 @@ router.include_router(productores.router, prefix="/productores", tags=["producto
 router.include_router(unidades_produccion.router, prefix="/unidades-produccion", tags=["unidades_produccion"])
 router.include_router(modulos.router, prefix="/modulos", tags=["modulos"])
 router.include_router(rutas.router, prefix="/rutas", tags=["rutas"])
+router.include_router(tramperos.router, prefix="/tramperos", tags=["tramperos"])
+router.include_router(tipos_trampa.router, prefix="/tipos-trampa", tags=["tipos_trampa"])
+router.include_router(trampas.router, prefix="/trampas", tags=["trampas"])
 router.include_router(legacy_router, prefix="/legacy")
