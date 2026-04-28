@@ -814,3 +814,59 @@ class IdentificacionListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+# ---------------------------------------------------------------
+# Dashboard V3 — KPIs y tablas agregadas (Sprint 7+8)
+# ---------------------------------------------------------------
+
+
+class DashboardKpi(BaseModel):
+    label: str
+    value: int
+    change_pct: float | None = None  # vs semana anterior, opcional
+
+
+class CapturasPorEspecie(BaseModel):
+    especie_mosca_id: int | None
+    especie_mosca_nombre: str | None
+    hembras_silvestre: int
+    machos_silvestre: int
+    hembras_esteril: int
+    machos_esteril: int
+    total: int
+
+
+class CapturasPorRuta(BaseModel):
+    ruta_id: int | None
+    ruta_nombre: str | None
+    trampas: int
+    revisiones: int
+    capturas_total: int
+
+
+class CapturasPorEstado(BaseModel):
+    estado_id: int
+    estado_nombre: str
+    estado_clave: str
+    trampas_activas: int
+    revisiones_ultima_semana: int
+    identificaciones_ultima_semana: int
+    capturas_total_ultima_semana: int
+
+
+class DashboardEstadoResponse(BaseModel):
+    estado_id: int
+    estado_nombre: str
+    semana: int
+    kpis: list[DashboardKpi]
+    capturas_por_especie: list[CapturasPorEspecie]
+    capturas_por_ruta: list[CapturasPorRuta]
+
+
+class DashboardNacionalResponse(BaseModel):
+    semana: int
+    total_estados_activos: int
+    kpis_globales: list[DashboardKpi]
+    capturas_por_especie_global: list[CapturasPorEspecie]
+    capturas_por_estado: list[CapturasPorEstado]

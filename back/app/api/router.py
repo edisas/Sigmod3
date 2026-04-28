@@ -5,6 +5,7 @@ from app.api.routes import (
     autorizaciones,
     catalogos,
     configuracion_sistema,
+    dashboard,
     health,
     identificaciones,
     modulos,
@@ -35,4 +36,5 @@ router.include_router(tipos_trampa.router, prefix="/tipos-trampa", tags=["tipos_
 router.include_router(trampas.router, prefix="/trampas", tags=["trampas"])
 router.include_router(revisiones.router, prefix="/revisiones", tags=["revisiones"])
 router.include_router(identificaciones.router, prefix="/identificaciones", tags=["identificaciones"])
+router.include_router(dashboard.router, prefix="/dashboard-v3", tags=["dashboard_v3"])
 router.include_router(legacy_router, prefix="/legacy")

@@ -9,6 +9,8 @@ export const NAVIGATION_ITEMS: NavItem[] = [
 ];
 
 export const PROCESS_NAVIGATION: NavItem[] = [
+  { icon: 'insights', label: 'Dashboard estatal', path: '/dashboard-v3' },
+  { icon: 'public', label: 'Dashboard nacional', path: '/dashboard-nacional' },
   {
     icon: 'assignment',
     label: 'Solicitudes de Acceso',
