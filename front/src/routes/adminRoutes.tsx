@@ -31,6 +31,7 @@ const TiposTrampaPage = lazy(() => import('@/pages/TiposTrampaPage'));
 const TrampasPage = lazy(() => import('@/pages/TrampasPage'));
 const RevisionesPage = lazy(() => import('@/pages/RevisionesPage'));
 const IdentificacionesPage = lazy(() => import('@/pages/IdentificacionesPage'));
+const CapturaSemanalPage = lazy(() => import('@/pages/CapturaSemanalPage'));
 const FiguraCooperadoraAutorizacionPage = lazy(() => import('@/pages/FiguraCooperadoraAutorizacionPage'));
 const AutorizacionesFcoopListPage = lazy(() => import('@/pages/AutorizacionesFcoopListPage'));
 const SystemConfigPage = lazy(() => import('@/pages/SystemConfigPage'));
@@ -82,6 +83,7 @@ export const adminProtectedRoutes = (
     <Route path="/trampas" element={<TrampasPage />} />
     <Route path="/revisiones" element={<RevisionesPage />} />
     <Route path="/identificaciones" element={<IdentificacionesPage />} />
+    <Route path="/captura-semanal" element={<CapturaSemanalPage />} />
     <Route path="/configuracion/sistema" element={<SystemConfigPage />} />
     <Route path="/configuracion/menus" element={<MenuSettingsPage />} />
     <Route path="/autorizaciones/figura-cooperadora/listado" element={<AutorizacionesFcoopListPage />} />

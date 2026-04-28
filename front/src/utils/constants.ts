@@ -19,6 +19,7 @@ export const PROCESS_NAVIGATION: NavItem[] = [
   { icon: 'forest', label: 'Unidades de producción', path: '/unidades-produccion' },
   { icon: 'route', label: 'Rutas de trampeo', path: '/rutas' },
   { icon: 'engineering', label: 'Tramperos', path: '/tramperos' },
+  { icon: 'bolt', label: 'Captura semanal', path: '/captura-semanal' },
   { icon: 'pest_control', label: 'Trampas', path: '/trampas' },
   { icon: 'fact_check', label: 'Revisiones', path: '/revisiones' },
   { icon: 'science', label: 'Identificaciones', path: '/identificaciones' },
