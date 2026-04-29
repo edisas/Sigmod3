@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import SistemaVersionEditor from '@/components/admin/SistemaVersionEditor';
 import { applyPalette, type SystemPalette } from '@/utils/palette';
 import {
   PUBLIC_ASSETS_STORAGE_KEY,
@@ -521,6 +522,8 @@ export default function SystemConfigPage() {
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       {success && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
+
+      <SistemaVersionEditor />
 
       <form onSubmit={saveSettings} className="space-y-6">
         <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
