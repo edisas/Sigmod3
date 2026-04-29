@@ -25,6 +25,7 @@ export const PROCESS_NAVIGATION: NavItem[] = [
   { icon: 'pest_control', label: 'Trampas', path: '/trampas' },
   { icon: 'fact_check', label: 'Revisiones', path: '/revisiones' },
   { icon: 'science', label: 'Identificaciones', path: '/identificaciones' },
+  { icon: 'local_shipping', label: 'TMIMFs (Movilización)', path: '/tmimfs' },
   {
     icon: 'inventory_2',
     label: 'Catalogos',

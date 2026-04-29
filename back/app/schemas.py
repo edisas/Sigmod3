@@ -870,3 +870,112 @@ class DashboardNacionalResponse(BaseModel):
     kpis_globales: list[DashboardKpi]
     capturas_por_especie_global: list[CapturasPorEspecie]
     capturas_por_estado: list[CapturasPorEstado]
+
+
+# ---------------------------------------------------------------
+# TMIMF — Tarjeta de Movimiento Interestatal de Mercancías
+# Fitosanitarias (Sprint 3.A)
+# ---------------------------------------------------------------
+
+
+class TmimfBase(BaseModel):
+    folio_tmimf: str = Field(min_length=1, max_length=15)
+    subfolio: int | None = None
+    folio_original: str | None = Field(default=None, max_length=30)
+    unidad_produccion_id: int | None = None
+    tipo_tarjeta: str = Field(default="M", min_length=1, max_length=1)
+    pais: str = Field(default="MEX", min_length=3, max_length=3)
+    ruta_id: int | None = None
+    modulo_emisor_id: int | None = None
+    mercado_id: int | None = None
+    tipo_transporte_id: int | None = None
+    placas_transporte: str | None = Field(default=None, max_length=25)
+    funcionario_aprobo_id: int | None = None
+    semana: str | None = Field(default=None, max_length=10)
+    fecha_emision: date | None = None
+    hora_emision: str | None = None
+    vigencia_tarjeta: int | None = None
+    fecha_vencimiento: date | None = None
+    clave_movilizacion: str = Field(default="", max_length=9)
+    nombre_pfa: str | None = Field(default=None, max_length=80)
+    cfmn: str | None = Field(default=None, max_length=40)
+    estado_id: int | None = None
+    estatus_bloqueo: str = Field(default="N", min_length=1, max_length=1)
+    resuelto: int = Field(default=0, ge=0, le=1)
+    facturado: int = Field(default=0, ge=0, le=1)
+    estatus_id: int = 1
+
+
+class TmimfCreate(TmimfBase):
+    pass
+
+
+class TmimfUpdate(TmimfBase):
+    pass
+
+
+class TmimfResponse(TmimfBase):
+    id: int
+    fecha_cancelacion: datetime | None = None
+    motivo_cancelacion: str | None = None
+    estado_nombre: str | None = None
+    unidad_produccion_ni: str | None = None
+    unidad_produccion_nombre: str | None = None
+    ruta_nombre: str | None = None
+    modulo_emisor_nombre: str | None = None
+    mercado_nombre: str | None = None
+    tipo_transporte_nombre: str | None = None
+    funcionario_aprobo_nombre: str | None = None
+
+
+class TmimfListResponse(BaseModel):
+    items: list[TmimfResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class TmimfCancelRequest(BaseModel):
+    motivo: str = Field(min_length=5, max_length=200)
+
+
+class TmimfDetalleBase(BaseModel):
+    sub_folio: int = Field(ge=0)
+    unidad_produccion_id: int | None = None
+    variedad_id: int | None = None
+    cantidad_movilizada: float | None = None
+    saldo: float = 0
+    cajas_14: int | None = None
+    cajas_15: int | None = None
+    cajas_16: int | None = None
+    cajas_18: int | None = None
+    cajas_20: int | None = None
+    cajas_25: int | None = None
+    cajas_30: int | None = None
+    granel: int | None = None
+    tipo_vehiculo_id: int | None = None
+    placas: str | None = Field(default=None, max_length=10)
+    semana: int | None = None
+    estatus_id: int = 1
+
+
+class TmimfDetalleCreate(TmimfDetalleBase):
+    pass
+
+
+class TmimfDetalleUpdate(TmimfDetalleBase):
+    pass
+
+
+class TmimfDetalleResponse(TmimfDetalleBase):
+    id: int
+    tmimf_id: int
+    estado_id: int | None = None
+    variedad_nombre: str | None = None
+    unidad_produccion_ni: str | None = None
+    tipo_vehiculo_nombre: str | None = None
+
+
+class TmimfDetalleListResponse(BaseModel):
+    items: list[TmimfDetalleResponse]
+    total: int

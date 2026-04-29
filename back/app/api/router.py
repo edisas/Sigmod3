@@ -14,6 +14,7 @@ from app.api.routes import (
     rutas,
     solicitudes,
     tipos_trampa,
+    tmimfs,
     trampas,
     tramperos,
     unidades_produccion,
@@ -37,4 +38,5 @@ router.include_router(trampas.router, prefix="/trampas", tags=["trampas"])
 router.include_router(revisiones.router, prefix="/revisiones", tags=["revisiones"])
 router.include_router(identificaciones.router, prefix="/identificaciones", tags=["identificaciones"])
 router.include_router(dashboard.router, prefix="/dashboard-v3", tags=["dashboard_v3"])
+router.include_router(tmimfs.router, prefix="/tmimf", tags=["tmimf"])
 router.include_router(legacy_router, prefix="/legacy")
