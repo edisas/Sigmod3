@@ -85,7 +85,7 @@ def _capturas_por_especie_estado(db: Session, estado_id: int, semana: int) -> li
             LEFT JOIN especies_mosca em ON em.id = i.especie_mosca_id
             WHERE t.estado_id = :e AND i.numero_semana = :s AND i.estatus_id = 1
             GROUP BY i.especie_mosca_id, em.nombre
-            ORDER BY (hs + ms + he + me) DESC
+            ORDER BY SUM(i.hembras_silvestre + i.machos_silvestre + i.hembras_esteril + i.machos_esteril) DESC
             """
         ),
         {"e": estado_id, "s": semana},
@@ -308,7 +308,7 @@ def resumen_nacional(
             LEFT JOIN especies_mosca em ON em.id = i.especie_mosca_id
             WHERE i.numero_semana = :s AND i.estatus_id = 1
             GROUP BY i.especie_mosca_id, em.nombre
-            ORDER BY (hs + ms + he + me) DESC
+            ORDER BY SUM(i.hembras_silvestre + i.machos_silvestre + i.hembras_esteril + i.machos_esteril) DESC
             """
         ),
         {"s": target_semana},
