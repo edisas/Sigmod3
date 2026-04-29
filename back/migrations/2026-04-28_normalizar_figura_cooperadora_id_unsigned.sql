@@ -112,12 +112,14 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 -- =========================================================
--- (5) Crear FK faltante en funcionarios (drift previo)
+-- (5) FK faltante en funcionarios — DIFERIDA
 -- =========================================================
-SET @fk_exists := (SELECT COUNT(*) FROM information_schema.referential_constraints WHERE constraint_schema=DATABASE() AND constraint_name='fk_funcionarios_figura');
-SET @fk_sql := IF(@fk_exists=0, 'ALTER TABLE funcionarios ADD CONSTRAINT fk_funcionarios_figura FOREIGN KEY (figura_cooperadora_id) REFERENCES figura_cooperadora(id) ON UPDATE CASCADE', 'SELECT 1');
-PREPARE stmt FROM @fk_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+-- funcionarios.figura_cooperadora_id (int(10) unsigned) ya estaba en
+-- el tipo correcto pero sin FK. Tiene 4 filas con valores que NO
+-- existen en figura_cooperadora (solo 1 fila id=1), así que crear la
+-- FK rompe con errno 1452. Se omite hasta que se haga limpieza de
+-- datos (UPDATE funcionarios SET figura_cooperadora_id = NULL para
+-- los huérfanos, o crear las figura_cooperadora correspondientes).
+-- Backlog: ver project_v3_backlog.md.
 
 COMMIT;
