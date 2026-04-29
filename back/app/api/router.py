@@ -9,6 +9,7 @@ from app.api.routes import (
     estimados_cosecha,
     health,
     identificaciones,
+    identificaciones_lab,
     modulos,
     productores,
     revisiones,
@@ -44,4 +45,5 @@ router.include_router(tmimfs.router, prefix="/tmimf", tags=["tmimf"])
 router.include_router(estimados_cosecha.router, prefix="/estimados-cosecha", tags=["estimados_cosecha"])
 router.include_router(estimados_cosecha.fenologia_router, prefix="/estados-fenologicos", tags=["estados_fenologicos"])
 router.include_router(superficies.router, prefix="/superficies", tags=["superficies"])
+router.include_router(identificaciones_lab.router, prefix="/identificaciones-lab", tags=["identificaciones_lab"])
 router.include_router(legacy_router, prefix="/legacy")

@@ -1074,3 +1074,47 @@ class SuperficieRegistradaListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+# ---------------------------------------------------------------
+# Identificaciones de laboratorio (Sprint 4.A)
+# ---------------------------------------------------------------
+
+
+class IdentificacionLabBase(BaseModel):
+    numero_muestra: str | None = Field(default=None, max_length=60)
+    fecha_diseccion: date | None = None
+    especie_mosca_id: int | None = None
+    numero_larvas: int = Field(default=0, ge=0)
+    larvas_1e: int = Field(default=0, ge=0)
+    larvas_2e: int = Field(default=0, ge=0)
+    larvas_3e: int = Field(default=0, ge=0)
+    observaciones: str | None = Field(default=None, max_length=200)
+    numero_semana: int | None = Field(default=None, ge=1, le=53)
+    fecha: date | None = None
+    hora: str | None = None
+    area_id: int | None = None
+    estado_id: int | None = None
+    estatus_id: int = 1
+
+
+class IdentificacionLabCreate(IdentificacionLabBase):
+    pass
+
+
+class IdentificacionLabUpdate(IdentificacionLabBase):
+    pass
+
+
+class IdentificacionLabResponse(IdentificacionLabBase):
+    id: int
+    especie_mosca_nombre: str | None = None
+    area_nombre: str | None = None
+    estado_nombre: str | None = None
+
+
+class IdentificacionLabListResponse(BaseModel):
+    items: list[IdentificacionLabResponse]
+    total: int
+    page: int
+    page_size: int
