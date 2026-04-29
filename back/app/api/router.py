@@ -13,6 +13,7 @@ from app.api.routes import (
     identificaciones,
     identificaciones_lab,
     modulos,
+    muestreos_frutos,
     productores,
     revisiones,
     rutas,
@@ -50,4 +51,5 @@ router.include_router(superficies.router, prefix="/superficies", tags=["superfic
 router.include_router(identificaciones_lab.router, prefix="/identificaciones-lab", tags=["identificaciones_lab"])
 router.include_router(control_quimico.router, prefix="/control-quimico", tags=["control_quimico"])
 router.include_router(control_mecanico.router, prefix="/control-mecanico", tags=["control_mecanico"])
+router.include_router(muestreos_frutos.router, prefix="/muestreos-frutos", tags=["muestreos_frutos"])
 router.include_router(legacy_router, prefix="/legacy")

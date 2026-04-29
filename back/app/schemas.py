@@ -1202,3 +1202,49 @@ class ControlMecanicoListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class MuestreoFrutoBase(BaseModel):
+    numero_muestra: str | None = Field(default=None, max_length=60)
+    fecha_muestreo: date | None = None
+    fecha_diseccion: date | None = None
+    unidad_produccion_id: int | None = None
+    numero_frutos: int = 0
+    kgs_muestreados: float = 0.0
+    kgs_disectados: float = 0.0
+    frutos_infestados: int = 0
+    tipo_colecta_id: int | None = None
+    tecnico_id: int | None = None
+    area_id: int | None = None
+    numero_semana: int | None = Field(default=None, ge=1, le=53)
+    hora: str | None = None
+    muestreador_id: int | None = None
+    variedad_id: int | None = None
+    camara_maduracion: int = 0
+    estado_id: int | None = None
+    estatus_id: int = 1
+
+
+class MuestreoFrutoCreate(MuestreoFrutoBase):
+    pass
+
+
+class MuestreoFrutoUpdate(MuestreoFrutoBase):
+    pass
+
+
+class MuestreoFrutoResponse(MuestreoFrutoBase):
+    id: int
+    unidad_nombre: str | None = None
+    tipo_colecta_nombre: str | None = None
+    area_nombre: str | None = None
+    variedad_nombre: str | None = None
+    muestreador_nombre: str | None = None
+    estado_nombre: str | None = None
+
+
+class MuestreoFrutoListResponse(BaseModel):
+    items: list[MuestreoFrutoResponse]
+    total: int
+    page: int
+    page_size: int

@@ -30,6 +30,7 @@ export const PROCESS_NAVIGATION: NavItem[] = [
   { icon: 'biotech', label: 'Identificaciones de laboratorio', path: '/identificaciones-lab' },
   { icon: 'sanitizer', label: 'Control quimico', path: '/control-quimico' },
   { icon: 'agriculture', label: 'Control mecanico/cultural', path: '/control-mecanico' },
+  { icon: 'spa', label: 'Muestreos de frutos', path: '/muestreos-frutos' },
   { icon: 'local_shipping', label: 'TMIMFs (Movilización)', path: '/tmimfs' },
   {
     icon: 'inventory_2',
