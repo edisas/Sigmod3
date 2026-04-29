@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import VersionUpdateBanner from './VersionUpdateBanner';
 import { useSidebar } from '@/hooks';
 import SessionInactivityGuard from '@/components/auth/SessionInactivityGuard';
 
@@ -12,6 +13,7 @@ export default function AdminLayout() {
       <SessionInactivityGuard />
       <Sidebar isOpen={isOpen} onClose={close} isMobile={isMobile} />
       <main className="flex-1 flex flex-col overflow-hidden bg-background-light dark:bg-background-dark">
+        <VersionUpdateBanner />
         <Header onToggleSidebar={toggle} />
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           <Outlet />
