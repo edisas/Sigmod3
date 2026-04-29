@@ -3,6 +3,7 @@ import { useLocation, Link } from 'react-router-dom';
 import Icon from '@/components/ui/Icon';
 import { PROCESS_NAVIGATION, ADMIN_NAVIGATION } from '@/utils/constants';
 import { useAuth } from '@/context/AuthContext';
+import { useSistemaVersion } from '@/hooks/useSistemaVersion';
 import {
   DEFAULT_DASHBOARD_ICON,
   getStoredPublicAssets,
@@ -119,6 +120,7 @@ export default function Sidebar({ isOpen, onClose, isMobile }: SidebarProps) {
   const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
   const location = useLocation();
   const { user, logout } = useAuth();
+  const sistemaVersion = useSistemaVersion();
   const [assets, setAssets] = useState(getStoredPublicAssets());
   const [menus, setMenus] = useState<MenuNode[]>(buildFallbackMenus());
   const [openMain, setOpenMain] = useState<Record<string, boolean>>({});
@@ -302,7 +304,7 @@ export default function Sidebar({ isOpen, onClose, isMobile }: SidebarProps) {
           </div>
         </nav>
 
-        <div className="p-4 border-t border-white/10">
+        <div className="p-4 border-t border-white/10 space-y-2">
           <div className="flex items-center gap-3 p-2 bg-white/5 rounded-xl">
             <div className="size-10 rounded-full bg-secondary flex items-center justify-center text-primary font-bold">
               {user?.initials ?? 'U'}
@@ -320,6 +322,16 @@ export default function Sidebar({ isOpen, onClose, isMobile }: SidebarProps) {
               <Icon name="logout" className="text-xl" />
             </button>
           </div>
+          {(sistemaVersion.staging || sistemaVersion.produccion) && (
+            <div className="flex flex-col items-center gap-0.5 text-[10px] text-slate-400 font-mono leading-tight">
+              {sistemaVersion.produccion && (
+                <span title="Versión en producción">prod {sistemaVersion.produccion.formatted}</span>
+              )}
+              {sistemaVersion.staging && (
+                <span title="Versión en staging">staging {sistemaVersion.staging.formatted}</span>
+              )}
+            </div>
+          )}
         </div>
       </aside>
     </>

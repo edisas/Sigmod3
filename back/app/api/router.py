@@ -19,6 +19,7 @@ from app.api.routes import (
     reportes_v3,
     revisiones,
     rutas,
+    sistema_version,
     solicitudes,
     superficies,
     tipos_trampa,
@@ -56,4 +57,5 @@ router.include_router(control_mecanico.router, prefix="/control-mecanico", tags=
 router.include_router(muestreos_frutos.router, prefix="/muestreos-frutos", tags=["muestreos_frutos"])
 router.include_router(anexos_01.router, prefix="/anexos-01", tags=["anexos_01"])
 router.include_router(reportes_v3.router, prefix="/reportes-v3", tags=["reportes_v3"])
+router.include_router(sistema_version.router, prefix="/sistema-version", tags=["sistema_version"])
 router.include_router(legacy_router, prefix="/legacy")
