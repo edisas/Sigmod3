@@ -16,6 +16,7 @@ from app.api.routes import (
     modulos,
     muestreos_frutos,
     productores,
+    reportes_v3,
     revisiones,
     rutas,
     solicitudes,
@@ -54,4 +55,5 @@ router.include_router(control_quimico.router, prefix="/control-quimico", tags=["
 router.include_router(control_mecanico.router, prefix="/control-mecanico", tags=["control_mecanico"])
 router.include_router(muestreos_frutos.router, prefix="/muestreos-frutos", tags=["muestreos_frutos"])
 router.include_router(anexos_01.router, prefix="/anexos-01", tags=["anexos_01"])
+router.include_router(reportes_v3.router, prefix="/reportes-v3", tags=["reportes_v3"])
 router.include_router(legacy_router, prefix="/legacy")

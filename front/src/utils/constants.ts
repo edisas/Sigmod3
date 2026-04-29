@@ -32,6 +32,7 @@ export const PROCESS_NAVIGATION: NavItem[] = [
   { icon: 'agriculture', label: 'Control mecanico/cultural', path: '/control-mecanico' },
   { icon: 'spa', label: 'Muestreos de frutos', path: '/muestreos-frutos' },
   { icon: 'description', label: 'Anexos 01 (TMIMF)', path: '/anexos-01' },
+  { icon: 'summarize', label: 'Reportes', path: '/reportes-v3' },
   { icon: 'local_shipping', label: 'TMIMFs (Movilización)', path: '/tmimfs' },
   {
     icon: 'inventory_2',
