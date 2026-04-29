@@ -28,6 +28,8 @@ export const PROCESS_NAVIGATION: NavItem[] = [
   { icon: 'fact_check', label: 'Revisiones', path: '/revisiones' },
   { icon: 'science', label: 'Identificaciones', path: '/identificaciones' },
   { icon: 'biotech', label: 'Identificaciones de laboratorio', path: '/identificaciones-lab' },
+  { icon: 'sanitizer', label: 'Control quimico', path: '/control-quimico' },
+  { icon: 'agriculture', label: 'Control mecanico/cultural', path: '/control-mecanico' },
   { icon: 'local_shipping', label: 'TMIMFs (Movilización)', path: '/tmimfs' },
   {
     icon: 'inventory_2',

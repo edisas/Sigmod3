@@ -32,6 +32,8 @@ const TrampasPage = lazy(() => import('@/pages/TrampasPage'));
 const RevisionesPage = lazy(() => import('@/pages/RevisionesPage'));
 const IdentificacionesPage = lazy(() => import('@/pages/IdentificacionesPage'));
 const IdentificacionesLabPage = lazy(() => import('@/pages/IdentificacionesLabPage'));
+const ControlQuimicoPage = lazy(() => import('@/pages/ControlQuimicoPage'));
+const ControlMecanicoPage = lazy(() => import('@/pages/ControlMecanicoPage'));
 const CapturaSemanalPage = lazy(() => import('@/pages/CapturaSemanalPage'));
 const DashboardV3Page = lazy(() => import('@/pages/DashboardV3Page'));
 const DashboardNacionalPage = lazy(() => import('@/pages/DashboardNacionalPage'));
@@ -90,6 +92,8 @@ export const adminProtectedRoutes = (
     <Route path="/revisiones" element={<RevisionesPage />} />
     <Route path="/identificaciones" element={<IdentificacionesPage />} />
     <Route path="/identificaciones-lab" element={<IdentificacionesLabPage />} />
+    <Route path="/control-quimico" element={<ControlQuimicoPage />} />
+    <Route path="/control-mecanico" element={<ControlMecanicoPage />} />
     <Route path="/captura-semanal" element={<CapturaSemanalPage />} />
     <Route path="/dashboard-v3" element={<DashboardV3Page />} />
     <Route path="/dashboard-nacional" element={<DashboardNacionalPage />} />

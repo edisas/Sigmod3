@@ -5,6 +5,8 @@ from app.api.routes import (
     autorizaciones,
     catalogos,
     configuracion_sistema,
+    control_mecanico,
+    control_quimico,
     dashboard,
     estimados_cosecha,
     health,
@@ -46,4 +48,6 @@ router.include_router(estimados_cosecha.router, prefix="/estimados-cosecha", tag
 router.include_router(estimados_cosecha.fenologia_router, prefix="/estados-fenologicos", tags=["estados_fenologicos"])
 router.include_router(superficies.router, prefix="/superficies", tags=["superficies"])
 router.include_router(identificaciones_lab.router, prefix="/identificaciones-lab", tags=["identificaciones_lab"])
+router.include_router(control_quimico.router, prefix="/control-quimico", tags=["control_quimico"])
+router.include_router(control_mecanico.router, prefix="/control-mecanico", tags=["control_mecanico"])
 router.include_router(legacy_router, prefix="/legacy")

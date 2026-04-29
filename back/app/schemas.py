@@ -1118,3 +1118,87 @@ class IdentificacionLabListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class ControlQuimicoBase(BaseModel):
+    tecnico_id: int | None = None
+    area_id: int | None = None
+    numero_semana: int | None = Field(default=None, ge=1, le=53)
+    fecha_aplicacion: date | None = None
+    unidad_produccion_id: int | None = None
+    tipo_aplicacion_id: int | None = None
+    superficie: float = 0.0
+    estaciones_cebo: int = 0
+    proteina_litros: float = 0.0
+    malathion_litros: float = 0.0
+    agua_litros: float = 0.0
+    observaciones: str | None = Field(default=None, max_length=200)
+    aplicador_id: int | None = None
+    hora: str | None = None
+    estado_id: int | None = None
+    estatus_id: int = 1
+
+
+class ControlQuimicoCreate(ControlQuimicoBase):
+    pass
+
+
+class ControlQuimicoUpdate(ControlQuimicoBase):
+    pass
+
+
+class ControlQuimicoResponse(ControlQuimicoBase):
+    id: int
+    area_nombre: str | None = None
+    unidad_nombre: str | None = None
+    tipo_aplicacion_nombre: str | None = None
+    aplicador_nombre: str | None = None
+    estado_nombre: str | None = None
+
+
+class ControlQuimicoListResponse(BaseModel):
+    items: list[ControlQuimicoResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class ControlMecanicoBase(BaseModel):
+    tecnico_id: int | None = None
+    area_id: int | None = None
+    numero_semana: int | None = Field(default=None, ge=1, le=53)
+    fecha: date | None = None
+    unidad_produccion_id: int | None = None
+    hospedero_id: int | None = None
+    kgs_destruidos: float = 0.0
+    numero_arboles: int = 0
+    has_rastreadas: float = 0.0
+    observaciones: str | None = Field(default=None, max_length=200)
+    hora: str | None = None
+    ejecutor_id: int | None = None
+    estado_id: int | None = None
+    estatus_id: int = 1
+
+
+class ControlMecanicoCreate(ControlMecanicoBase):
+    pass
+
+
+class ControlMecanicoUpdate(ControlMecanicoBase):
+    pass
+
+
+class ControlMecanicoResponse(ControlMecanicoBase):
+    id: int
+    area_nombre: str | None = None
+    unidad_nombre: str | None = None
+    hospedero_nombre: str | None = None
+    ejecutor_nombre: str | None = None
+    estado_nombre: str | None = None
+
+
+class ControlMecanicoListResponse(BaseModel):
+    items: list[ControlMecanicoResponse]
+    total: int
+    page: int
+    page_size: int
