@@ -35,6 +35,7 @@ const IdentificacionesLabPage = lazy(() => import('@/pages/IdentificacionesLabPa
 const ControlQuimicoPage = lazy(() => import('@/pages/ControlQuimicoPage'));
 const ControlMecanicoPage = lazy(() => import('@/pages/ControlMecanicoPage'));
 const MuestreosFrutosPage = lazy(() => import('@/pages/MuestreosFrutosPage'));
+const Anexos01Page = lazy(() => import('@/pages/Anexos01Page'));
 const CapturaSemanalPage = lazy(() => import('@/pages/CapturaSemanalPage'));
 const DashboardV3Page = lazy(() => import('@/pages/DashboardV3Page'));
 const DashboardNacionalPage = lazy(() => import('@/pages/DashboardNacionalPage'));
@@ -96,6 +97,7 @@ export const adminProtectedRoutes = (
     <Route path="/control-quimico" element={<ControlQuimicoPage />} />
     <Route path="/control-mecanico" element={<ControlMecanicoPage />} />
     <Route path="/muestreos-frutos" element={<MuestreosFrutosPage />} />
+    <Route path="/anexos-01" element={<Anexos01Page />} />
     <Route path="/captura-semanal" element={<CapturaSemanalPage />} />
     <Route path="/dashboard-v3" element={<DashboardV3Page />} />
     <Route path="/dashboard-nacional" element={<DashboardNacionalPage />} />

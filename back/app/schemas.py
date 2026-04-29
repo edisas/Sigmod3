@@ -1248,3 +1248,52 @@ class MuestreoFrutoListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class Anexo01Base(BaseModel):
+    productor_id: int
+    municipio_id: int
+    estado_id: int
+    colonia_id: int | None = None
+    calle: str | None = Field(default=None, max_length=150)
+    numero: str | None = Field(default=None, max_length=45)
+    codigo_postal: str = Field(max_length=10)
+    destino: str | None = Field(default=None, max_length=100)
+    latitud: str | None = Field(default=None, max_length=15)
+    longitud: str | None = Field(default=None, max_length=15)
+    medidas_fitosanitarias: str | None = None
+    numero_inscripcion: str | None = Field(default=None, max_length=45)
+    nombre_unidad: str | None = Field(default=None, max_length=150)
+    origen_producto: str | None = Field(default=None, max_length=150)
+    superficies: str | None = Field(default=None, max_length=150)
+    variedades: str | None = Field(default=None, max_length=150)
+    volumen_produccion: str | None = Field(default=None, max_length=45)
+    temporada: str | None = Field(default=None, max_length=45)
+    fecha_emision: datetime | None = None
+    lugar_emision: str | None = Field(default=None, max_length=150)
+    plagas_objetivo: str | None = None
+    ubicacion: str | None = None
+    ruta: str | None = Field(default=None, max_length=150)
+    estatus_id: int = 1
+
+
+class Anexo01Create(Anexo01Base):
+    pass
+
+
+class Anexo01Update(Anexo01Base):
+    pass
+
+
+class Anexo01Response(Anexo01Base):
+    id: int
+    productor_nombre: str | None = None
+    municipio_nombre: str | None = None
+    estado_nombre: str | None = None
+
+
+class Anexo01ListResponse(BaseModel):
+    items: list[Anexo01Response]
+    total: int
+    page: int
+    page_size: int

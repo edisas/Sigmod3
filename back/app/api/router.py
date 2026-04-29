@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.routes import (
+    anexos_01,
     auth,
     autorizaciones,
     catalogos,
@@ -52,4 +53,5 @@ router.include_router(identificaciones_lab.router, prefix="/identificaciones-lab
 router.include_router(control_quimico.router, prefix="/control-quimico", tags=["control_quimico"])
 router.include_router(control_mecanico.router, prefix="/control-mecanico", tags=["control_mecanico"])
 router.include_router(muestreos_frutos.router, prefix="/muestreos-frutos", tags=["muestreos_frutos"])
+router.include_router(anexos_01.router, prefix="/anexos-01", tags=["anexos_01"])
 router.include_router(legacy_router, prefix="/legacy")
