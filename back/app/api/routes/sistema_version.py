@@ -84,20 +84,26 @@ def update_sistema_version(
     if (current_user.rol or "").strip().lower() not in ADMIN_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo administradores")
 
+    sets: list[str]
+    params: dict[str, object]
     if payload.env == "staging":
         sets = ["staging_patch = :patch"]
-        params: dict[str, object] = {"patch": payload.patch}
+        params = {"patch": payload.patch}
         if payload.major is not None:
-            sets.append("staging_major = :major"); params["major"] = payload.major
+            sets.append("staging_major = :major")
+            params["major"] = payload.major
         if payload.minor is not None:
-            sets.append("staging_minor = :minor"); params["minor"] = payload.minor
+            sets.append("staging_minor = :minor")
+            params["minor"] = payload.minor
     else:
         sets = ["produccion_patch = :patch"]
         params = {"patch": payload.patch}
         if payload.major is not None:
-            sets.append("produccion_major = :major"); params["major"] = payload.major
+            sets.append("produccion_major = :major")
+            params["major"] = payload.major
         if payload.minor is not None:
-            sets.append("produccion_minor = :minor"); params["minor"] = payload.minor
+            sets.append("produccion_minor = :minor")
+            params["minor"] = payload.minor
 
     db.execute(text(f"UPDATE sistema_version SET {', '.join(sets)}, updated_at = NOW() WHERE id = 1"), params)
     db.commit()
