@@ -6,6 +6,7 @@ from app.api.routes import (
     catalogos,
     configuracion_sistema,
     dashboard,
+    estimados_cosecha,
     health,
     identificaciones,
     modulos,
@@ -13,6 +14,7 @@ from app.api.routes import (
     revisiones,
     rutas,
     solicitudes,
+    superficies,
     tipos_trampa,
     tmimfs,
     trampas,
@@ -39,4 +41,7 @@ router.include_router(revisiones.router, prefix="/revisiones", tags=["revisiones
 router.include_router(identificaciones.router, prefix="/identificaciones", tags=["identificaciones"])
 router.include_router(dashboard.router, prefix="/dashboard-v3", tags=["dashboard_v3"])
 router.include_router(tmimfs.router, prefix="/tmimf", tags=["tmimf"])
+router.include_router(estimados_cosecha.router, prefix="/estimados-cosecha", tags=["estimados_cosecha"])
+router.include_router(estimados_cosecha.fenologia_router, prefix="/estados-fenologicos", tags=["estados_fenologicos"])
+router.include_router(superficies.router, prefix="/superficies", tags=["superficies"])
 router.include_router(legacy_router, prefix="/legacy")

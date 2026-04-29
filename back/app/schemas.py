@@ -979,3 +979,98 @@ class TmimfDetalleResponse(TmimfDetalleBase):
 class TmimfDetalleListResponse(BaseModel):
     items: list[TmimfDetalleResponse]
     total: int
+
+
+# ---------------------------------------------------------------
+# Estados fenológicos (Sprint 3.B) — catálogo simple
+# ---------------------------------------------------------------
+
+
+class EstadoFenologicoOption(BaseModel):
+    id: int
+    descripcion: str
+    clave: str | None = None
+    estatus_id: int = 1
+
+
+class EstadoFenologicoListResponse(BaseModel):
+    items: list[EstadoFenologicoOption]
+    total: int
+
+
+# ---------------------------------------------------------------
+# Estimados de cosecha (Sprint 3.B)
+# ---------------------------------------------------------------
+
+
+class EstimadoCosechaBase(BaseModel):
+    unidad_produccion_id: int
+    variedad_id: int
+    superficie: float | None = None
+    estimado: float | None = None
+    kg_estimados: float = Field(default=0, ge=0)
+    saldo: float | None = None
+    fecha_estimacion: date | None = None
+    estatus_id: int = 1
+
+
+class EstimadoCosechaCreate(EstimadoCosechaBase):
+    motivo: str | None = Field(default=None, max_length=200)
+
+
+class EstimadoCosechaUpdate(EstimadoCosechaBase):
+    motivo: str | None = Field(default=None, max_length=200)
+
+
+class EstimadoCosechaResponse(EstimadoCosechaBase):
+    id: int
+    progresivo: int | None = None
+    unidad_produccion_ni: str | None = None
+    unidad_produccion_nombre: str | None = None
+    variedad_nombre: str | None = None
+
+
+class EstimadoCosechaListResponse(BaseModel):
+    items: list[EstimadoCosechaResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+# ---------------------------------------------------------------
+# Superficies registradas (Sprint 3.B)
+# ---------------------------------------------------------------
+
+
+class SuperficieRegistradaBase(BaseModel):
+    unidad_produccion_id: int
+    variedad_id: int
+    superficie: float | None = None
+    fenologia_id: int | None = None
+    facturado: int = Field(default=0, ge=0, le=1)
+    folio_factura: str | None = Field(default=None, max_length=45)
+    ejercicio_fiscal: str | None = Field(default=None, max_length=4)
+    estatus_id: int = 1
+
+
+class SuperficieRegistradaCreate(SuperficieRegistradaBase):
+    pass
+
+
+class SuperficieRegistradaUpdate(SuperficieRegistradaBase):
+    pass
+
+
+class SuperficieRegistradaResponse(SuperficieRegistradaBase):
+    id: int
+    unidad_produccion_ni: str | None = None
+    unidad_produccion_nombre: str | None = None
+    variedad_nombre: str | None = None
+    fenologia_descripcion: str | None = None
+
+
+class SuperficieRegistradaListResponse(BaseModel):
+    items: list[SuperficieRegistradaResponse]
+    total: int
+    page: int
+    page_size: int
